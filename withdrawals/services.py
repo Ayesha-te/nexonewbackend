@@ -10,6 +10,15 @@ from .models import AutoWithdrawalLog, Withdrawal
 User = get_user_model()
 
 
+def get_withdrawable_balance(user):
+    wallet = ensure_wallet(user)
+    balance = max(wallet.balance, user.current_income)
+    if wallet.balance != balance:
+        wallet.balance = balance
+        wallet.save(update_fields=["balance"])
+    return balance, wallet
+
+
 def calculate_withdrawal_amounts(balance):
     amount = min(balance, 4000)
     tax_type = "normal"
@@ -28,19 +37,19 @@ def calculate_withdrawal_amounts(balance):
 
 def sync_user_pending_withdrawal(user, run_date=None):
     run_date = run_date or date.today()
-    wallet = ensure_wallet(user)
+    balance, _wallet = get_withdrawable_balance(user)
     pending = (
         Withdrawal.objects.filter(user=user, status="pending", auto_generated=True)
         .order_by("-date", "-id")
         .first()
     )
 
-    if wallet.balance <= 0:
+    if balance <= 0:
         if pending:
             pending.delete()
         return None
 
-    amounts = calculate_withdrawal_amounts(wallet.balance)
+    amounts = calculate_withdrawal_amounts(balance)
     payload = {
         "payment_method": user.payment_method,
         "account_number": user.account_number,
@@ -62,7 +71,7 @@ def sync_user_pending_withdrawal(user, run_date=None):
 
 def sync_all_pending_withdrawals(run_date=None):
     run_date = run_date or date.today()
-    for user in User.objects.filter(is_staff=False, is_active=True, is_approved=True):
+    for user in User.objects.filter(is_staff=False, is_active=True):
         sync_user_pending_withdrawal(user, run_date=run_date)
 
 
@@ -72,8 +81,8 @@ def approve_withdrawal(withdrawal):
     if withdrawal.status != "pending":
         raise ValueError("Withdrawal is already processed.")
 
-    wallet = ensure_wallet(withdrawal.user)
-    if wallet.balance < withdrawal.amount:
+    balance, _wallet = get_withdrawable_balance(withdrawal.user)
+    if balance < withdrawal.amount:
         raise ValueError("User does not have enough balance for this withdrawal anymore.")
 
     debit_wallet(
@@ -95,7 +104,7 @@ def process_daily_auto_withdrawals(run_date=None):
     if AutoWithdrawalLog.objects.filter(run_date=run_date).exists():
         return 0
     processed = 0
-    for user in User.objects.filter(is_staff=False, is_active=True, is_approved=True):
+    for user in User.objects.filter(is_staff=False, is_active=True):
         if sync_user_pending_withdrawal(user, run_date=run_date):
             processed += 1
     AutoWithdrawalLog.objects.create(run_date=run_date)
