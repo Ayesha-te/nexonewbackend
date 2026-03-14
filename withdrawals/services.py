@@ -2,6 +2,7 @@ from datetime import date
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
+from django.utils import timezone
 
 from wallets.services import debit_wallet, ensure_wallet
 
@@ -35,6 +36,14 @@ def calculate_withdrawal_amounts(balance):
     }
 
 
+def get_payment_label(payment_method):
+    if payment_method == "easypaisa":
+        return "EasyPaisa"
+    if payment_method == "jazzcash":
+        return "JazzCash"
+    return payment_method or "Account"
+
+
 def sync_user_pending_withdrawal(user, run_date=None):
     run_date = run_date or date.today()
     balance, _wallet = get_withdrawable_balance(user)
@@ -52,7 +61,10 @@ def sync_user_pending_withdrawal(user, run_date=None):
     amounts = calculate_withdrawal_amounts(balance)
     payload = {
         "payment_method": user.payment_method,
+        "bank_name": get_payment_label(user.payment_method),
+        "account_name": user.full_name or user.username or user.email,
         "account_number": user.account_number,
+        "tx_id": "",
         **amounts,
     }
     if pending:
@@ -65,6 +77,7 @@ def sync_user_pending_withdrawal(user, run_date=None):
         status="pending",
         auto_generated=True,
         date=run_date,
+        created_at=timezone.now(),
         **payload,
     )
 
