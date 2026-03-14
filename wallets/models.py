@@ -8,7 +8,9 @@ User = settings.AUTH_USER_MODEL
 class Wallet(models.Model):
     user = models.OneToOneField(User, related_name="wallet", on_delete=models.CASCADE)
     balance = models.IntegerField(default=0)
+    income_pkr = models.IntegerField(default=0)
     reward_balance = models.IntegerField(default=0)
+    hold_pkr = models.IntegerField(default=0)
 
 
 class LedgerEntry(models.Model):

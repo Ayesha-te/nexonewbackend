@@ -9,6 +9,8 @@ User = get_user_model()
 class UserSerializer(serializers.ModelSerializer):
     name = serializers.SerializerMethodField()
     available_pins = serializers.SerializerMethodField()
+    referral_email = serializers.SerializerMethodField()
+    is_active = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = User
@@ -29,10 +31,14 @@ class UserSerializer(serializers.ModelSerializer):
             "available_pins",
             "left_team_count",
             "right_team_count",
+            "pair_count",
             "referral_code",
+            "referral_email",
             "is_staff",
+            "is_active",
             "is_approved",
             "stop_earnings",
+            "created_at",
         ]
         read_only_fields = [
             "email",
@@ -45,10 +51,14 @@ class UserSerializer(serializers.ModelSerializer):
             "available_pins",
             "left_team_count",
             "right_team_count",
+            "pair_count",
             "referral_code",
+            "referral_email",
             "is_staff",
+            "is_active",
             "is_approved",
             "stop_earnings",
+            "created_at",
         ]
 
     def get_name(self, obj):
@@ -56,6 +66,9 @@ class UserSerializer(serializers.ModelSerializer):
 
     def get_available_pins(self, obj):
         return obj.pins.filter(status="unused").count()
+
+    def get_referral_email(self, obj):
+        return obj.referred_by.email if obj.referred_by else ""
 
 
 class ProfileUpdateSerializer(serializers.ModelSerializer):

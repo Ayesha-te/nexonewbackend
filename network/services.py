@@ -1,3 +1,5 @@
+from collections import deque
+
 from .models import BinaryNode
 
 
@@ -22,3 +24,26 @@ def build_tree_payload(user):
         root_user = node.parent
         node = BinaryNode.objects.filter(user=root_user).first()
     return serialize_node(root_user)
+
+
+def get_children_map(user):
+    return {node.side: node.user for node in BinaryNode.objects.filter(parent=user).select_related("user")}
+
+
+def find_next_open_slot(root_user, preferred_side):
+    children = get_children_map(root_user)
+    if preferred_side not in children:
+        return root_user, preferred_side
+
+    queue = deque([children[preferred_side]])
+    while queue:
+        candidate = queue.popleft()
+        candidate_children = get_children_map(candidate)
+        if "left" not in candidate_children:
+            return candidate, "left"
+        if "right" not in candidate_children:
+            return candidate, "right"
+        queue.append(candidate_children["left"])
+        queue.append(candidate_children["right"])
+
+    raise ValueError("No placement slot available for this branch.")

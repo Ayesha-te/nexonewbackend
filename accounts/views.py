@@ -61,17 +61,21 @@ class ActivateUserView(APIView):
         serializer = PinActivationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-        user = create_user_from_pin(
-            sponsor_email=data["referralEmail"],
-            pin_code=data["pinToken"],
-            first_name=data["firstName"],
-            last_name=data["lastName"],
-            email=data["email"],
-            phone=data["phone"],
-            account_number=data["accountNumber"],
-            position=data["position"],
-            payment_method=data["paymentMethod"],
-        )
+        try:
+            user = create_user_from_pin(
+                activating_user=request.user,
+                sponsor_email=data["referralEmail"],
+                pin_code=data["pinToken"],
+                first_name=data["firstName"],
+                last_name=data["lastName"],
+                email=data["email"],
+                phone=data["phone"],
+                account_number=data["accountNumber"],
+                position=data["position"],
+                payment_method=data["paymentMethod"],
+            )
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=400)
         PinActivationRequest.objects.create(
             user=request.user,
             pin_code=data["pinToken"],
@@ -85,7 +89,15 @@ class ActivateUserView(APIView):
             payment_method=data["paymentMethod"],
             status="completed",
         )
-        return Response({"detail": "Account activated.", "user_id": user.id}, status=201)
+        return Response(
+            {
+                "detail": "Account activated.",
+                "user_id": user.id,
+                "login_email": user.email,
+                "login_password": user.email,
+            },
+            status=201,
+        )
 
 
 class MyTreeView(APIView):

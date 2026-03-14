@@ -30,6 +30,8 @@ class LoginSerializer(serializers.Serializer):
             )
             if not admin_user:
                 raise serializers.ValidationError({"detail": "Invalid admin credentials."})
+            if not admin_user.is_active:
+                raise serializers.ValidationError({"detail": "Account is deactivated. Please contact admin."})
             user = authenticate(request=request, username=admin_user.email, password=password)
             if not user or not user.is_staff:
                 raise serializers.ValidationError({"detail": "Invalid admin credentials."})
@@ -39,11 +41,15 @@ class LoginSerializer(serializers.Serializer):
         if not email:
             raise serializers.ValidationError({"email": ["This field is required."]})
 
+        existing_user = User.objects.filter(email__iexact=email, is_staff=False).first()
+        if existing_user and not existing_user.is_active:
+            raise serializers.ValidationError({"detail": "Account is deactivated. Please contact admin."})
+
         user = authenticate(request=request, username=email, password=password)
         if not user:
             raise serializers.ValidationError({"detail": "Invalid credentials."})
         if not user.is_active:
-            raise serializers.ValidationError({"detail": "User account is disabled."})
+            raise serializers.ValidationError({"detail": "Account is deactivated. Please contact admin."})
         attrs["user"] = user
         return attrs
 
