@@ -30,13 +30,25 @@ class MyPinsApiTests(TestCase):
         )
         self.client.force_authenticate(self.user)
 
-    def test_my_pins_only_returns_unused_pins(self):
+    def test_my_pins_returns_used_and_unused_pins(self):
         available_pin = Pin.objects.create(owner=self.user, status="unused", amount=1000)
-        Pin.objects.create(owner=self.user, status="used", used_by=self.used_by_user, amount=1000)
+        used_pin = Pin.objects.create(owner=self.user, status="used", used_by=self.used_by_user, amount=1000)
 
         response = self.client.get("/api/pins/me/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.data), 1)
-        self.assertEqual(response.data[0]["id"], available_pin.id)
-        self.assertEqual(response.data[0]["status"], "available")
+        self.assertEqual(len(response.data), 2)
+        returned_ids = {row["id"] for row in response.data}
+        returned_statuses = {row["id"]: row["status"] for row in response.data}
+        self.assertEqual(returned_ids, {available_pin.id, used_pin.id})
+        self.assertEqual(returned_statuses[available_pin.id], "available")
+        self.assertEqual(returned_statuses[used_pin.id], "used")
+
+    def test_accounts_me_available_pins_only_counts_unused_pins(self):
+        Pin.objects.create(owner=self.user, status="unused", amount=1000)
+        Pin.objects.create(owner=self.user, status="used", used_by=self.used_by_user, amount=1000)
+
+        response = self.client.get("/api/accounts/me/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["available_pins"], 1)

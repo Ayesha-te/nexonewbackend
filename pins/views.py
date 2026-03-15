@@ -10,8 +10,7 @@ from .serializers import PinRequestCreateSerializer, PinRequestSerializer, PinSe
 
 class MyPinsView(APIView):
     def get(self, request):
-        available_pins = request.user.pins.filter(status="unused").order_by("-created_at")
-        return Response(PinSerializer(available_pins, many=True).data)
+        return Response(PinSerializer(request.user.pins.all().order_by("-created_at"), many=True).data)
 
 
 class PinRequestView(APIView):
