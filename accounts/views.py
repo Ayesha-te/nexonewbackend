@@ -64,7 +64,7 @@ class ActivateUserView(APIView):
         try:
             user = create_user_from_pin(
                 activating_user=request.user,
-                sponsor_email=data["referralEmail"],
+                sponsor_email=request.user.email,
                 pin_code=data["pinToken"],
                 first_name=data["firstName"],
                 last_name=data["lastName"],
