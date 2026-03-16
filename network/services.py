@@ -29,9 +29,16 @@ def get_children_map(user):
 
 
 def find_next_open_slot(root_user, preferred_side):
+    if preferred_side not in {"left", "right"}:
+        raise ValueError("Preferred side must be left or right.")
+
     current = root_user
     while True:
-        children = get_children_map(current)
-        if preferred_side not in children:
+        next_branch_node = (
+            BinaryNode.objects.filter(parent=current, side=preferred_side)
+            .select_related("user")
+            .first()
+        )
+        if not next_branch_node:
             return current, preferred_side
-        current = children[preferred_side]
+        current = next_branch_node.user

@@ -122,6 +122,78 @@ class ActivateUserViewTests(TestCase):
         self.assertEqual(second_node.parent, first_child)
         self.assertEqual(second_node.side, "left")
 
+    def test_four_repeated_left_placements_stay_on_single_left_chain(self):
+        created_emails = []
+
+        for index in range(4):
+            pin = Pin.objects.create(owner=self.user, status="unused", amount=1000)
+            email = f"left-chain-{index + 1}@example.com"
+            response = self.client.post(
+                "/api/accounts/activate/",
+                {
+                    "pinToken": pin.code,
+                    "firstName": f"Left{index + 1}",
+                    "lastName": "Chain",
+                    "email": email,
+                    "phone": f"0300000000{index + 1}",
+                    "accountNumber": f"0300000000{index + 1}",
+                    "referralEmail": self.user.email,
+                    "position": "left",
+                    "paymentMethod": "easypaisa",
+                },
+                format="json",
+            )
+            self.assertEqual(response.status_code, 201)
+            created_emails.append(email)
+
+        parent = self.user
+        for email in created_emails:
+            child = User.objects.get(email=email)
+            node = BinaryNode.objects.get(user=child)
+            self.assertEqual(node.parent, parent)
+            self.assertEqual(node.side, "left")
+            parent = child
+
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.left_team_count, 4)
+        self.assertEqual(self.user.right_team_count, 0)
+
+    def test_four_repeated_right_placements_stay_on_single_right_chain(self):
+        created_emails = []
+
+        for index in range(4):
+            pin = Pin.objects.create(owner=self.user, status="unused", amount=1000)
+            email = f"right-chain-{index + 1}@example.com"
+            response = self.client.post(
+                "/api/accounts/activate/",
+                {
+                    "pinToken": pin.code,
+                    "firstName": f"Right{index + 1}",
+                    "lastName": "Chain",
+                    "email": email,
+                    "phone": f"0310000000{index + 1}",
+                    "accountNumber": f"0310000000{index + 1}",
+                    "referralEmail": self.user.email,
+                    "position": "right",
+                    "paymentMethod": "easypaisa",
+                },
+                format="json",
+            )
+            self.assertEqual(response.status_code, 201)
+            created_emails.append(email)
+
+        parent = self.user
+        for email in created_emails:
+            child = User.objects.get(email=email)
+            node = BinaryNode.objects.get(user=child)
+            self.assertEqual(node.parent, parent)
+            self.assertEqual(node.side, "right")
+            parent = child
+
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.left_team_count, 0)
+        self.assertEqual(self.user.right_team_count, 4)
+
 
 class AdminDeleteUserTests(TestCase):
     def setUp(self):
