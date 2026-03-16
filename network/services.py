@@ -1,5 +1,3 @@
-from collections import deque
-
 from .models import BinaryNode
 
 
@@ -31,19 +29,9 @@ def get_children_map(user):
 
 
 def find_next_open_slot(root_user, preferred_side):
-    children = get_children_map(root_user)
-    if preferred_side not in children:
-        return root_user, preferred_side
-
-    queue = deque([children[preferred_side]])
-    while queue:
-        candidate = queue.popleft()
-        candidate_children = get_children_map(candidate)
-        if "left" not in candidate_children:
-            return candidate, "left"
-        if "right" not in candidate_children:
-            return candidate, "right"
-        queue.append(candidate_children["left"])
-        queue.append(candidate_children["right"])
-
-    raise ValueError("No placement slot available for this branch.")
+    current = root_user
+    while True:
+        children = get_children_map(current)
+        if preferred_side not in children:
+            return current, preferred_side
+        current = children[preferred_side]

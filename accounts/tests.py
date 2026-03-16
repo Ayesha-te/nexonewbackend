@@ -2,6 +2,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from rest_framework.test import APIClient
 
+from network.models import BinaryNode
 from pins.models import Pin
 
 User = get_user_model()
@@ -69,3 +70,52 @@ class ActivateUserViewTests(TestCase):
         self.assertEqual(pin.status, "used")
         self.assertIsNotNone(pin.used_by)
         self.assertEqual(pin.used_by.email, "child@example.com")
+
+    def test_repeated_left_placements_stay_on_left_chain(self):
+        first_pin = Pin.objects.create(owner=self.user, status="unused", amount=1000)
+        second_pin = Pin.objects.create(owner=self.user, status="unused", amount=1000)
+
+        first_response = self.client.post(
+            "/api/accounts/activate/",
+            {
+                "pinToken": first_pin.code,
+                "firstName": "Ali",
+                "lastName": "Khan",
+                "email": "left1@example.com",
+                "phone": "03001111111",
+                "accountNumber": "03001111111",
+                "referralEmail": self.user.email,
+                "position": "left",
+                "paymentMethod": "easypaisa",
+            },
+            format="json",
+        )
+        second_response = self.client.post(
+            "/api/accounts/activate/",
+            {
+                "pinToken": second_pin.code,
+                "firstName": "Sara",
+                "lastName": "Khan",
+                "email": "left2@example.com",
+                "phone": "03002222222",
+                "accountNumber": "03002222222",
+                "referralEmail": self.user.email,
+                "position": "left",
+                "paymentMethod": "easypaisa",
+            },
+            format="json",
+        )
+
+        self.assertEqual(first_response.status_code, 201)
+        self.assertEqual(second_response.status_code, 201)
+
+        first_child = User.objects.get(email="left1@example.com")
+        second_child = User.objects.get(email="left2@example.com")
+
+        first_node = BinaryNode.objects.get(user=first_child)
+        second_node = BinaryNode.objects.get(user=second_child)
+
+        self.assertEqual(first_node.parent, self.user)
+        self.assertEqual(first_node.side, "left")
+        self.assertEqual(second_node.parent, first_child)
+        self.assertEqual(second_node.side, "left")
