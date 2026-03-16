@@ -99,3 +99,67 @@ def get_pair_reward_amount(pair_number):
     if pair_number <= 99:
         return 200
     return 100
+
+
+def collect_subtree_user_ids(root_user_id):
+    subtree_ids = {root_user_id}
+    frontier = [root_user_id]
+
+    while frontier:
+        child_ids = list(
+            BinaryNode.objects.filter(parent_id__in=frontier).values_list("user_id", flat=True)
+        )
+        child_ids = [child_id for child_id in child_ids if child_id not in subtree_ids]
+        subtree_ids.update(child_ids)
+        frontier = child_ids
+
+    return subtree_ids
+
+
+def rebuild_network_metrics():
+    users = {
+        user.id: user
+        for user in User.objects.filter(is_staff=False)
+    }
+    children_by_parent = {}
+
+    for node in BinaryNode.objects.filter(user_id__in=users.keys()).values("user_id", "parent_id", "side"):
+        parent_id = node["parent_id"]
+        if parent_id not in users:
+            continue
+        children_by_parent.setdefault(parent_id, {})[node["side"]] = node["user_id"]
+
+    def compute_counts(user_id):
+        children = children_by_parent.get(user_id, {})
+        left_user_id = children.get("left")
+        right_user_id = children.get("right")
+
+        left_count = 0 if left_user_id is None else 1 + compute_counts(left_user_id)
+        right_count = 0 if right_user_id is None else 1 + compute_counts(right_user_id)
+
+        user = users[user_id]
+        user.left_team_count = left_count
+        user.right_team_count = right_count
+        user.pair_count = min(left_count, right_count)
+
+        return left_count + right_count
+
+    for user_id in users:
+        compute_counts(user_id)
+
+    User.objects.bulk_update(
+        users.values(),
+        ["left_team_count", "right_team_count", "pair_count"],
+    )
+
+
+@transaction.atomic
+def delete_user_subtree(*, user):
+    if user.is_staff:
+        raise ValueError("Admin users cannot be deleted from this screen.")
+
+    subtree_ids = collect_subtree_user_ids(user.id)
+    deleted_count = len(subtree_ids)
+    User.objects.filter(id__in=subtree_ids, is_staff=False).delete()
+    rebuild_network_metrics()
+    return deleted_count

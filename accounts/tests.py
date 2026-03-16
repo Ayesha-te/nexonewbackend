@@ -2,8 +2,10 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from rest_framework.test import APIClient
 
+from complaints.models import ComplaintFeedback
 from network.models import BinaryNode
 from pins.models import Pin
+from wallets.services import ensure_wallet
 
 User = get_user_model()
 
@@ -119,3 +121,94 @@ class ActivateUserViewTests(TestCase):
         self.assertEqual(first_node.side, "left")
         self.assertEqual(second_node.parent, first_child)
         self.assertEqual(second_node.side, "left")
+
+
+class AdminDeleteUserTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.admin = User.objects.create_superuser(
+            email="admin-delete@example.com",
+            username="admin-delete",
+            password="adminpass123",
+        )
+        self.root = User.objects.create_user(
+            email="root@example.com",
+            username="root",
+            password="pass12345",
+            is_approved=True,
+            is_active=True,
+            payment_method="easypaisa",
+            account_number="03000000001",
+        )
+        self.left = User.objects.create_user(
+            email="left@example.com",
+            username="left",
+            password="pass12345",
+            is_approved=True,
+            is_active=True,
+            payment_method="easypaisa",
+            account_number="03000000002",
+            referred_by=self.root,
+            placement_parent=self.root,
+            placement_side="left",
+        )
+        self.right = User.objects.create_user(
+            email="right@example.com",
+            username="right",
+            password="pass12345",
+            is_approved=True,
+            is_active=True,
+            payment_method="easypaisa",
+            account_number="03000000003",
+            referred_by=self.root,
+            placement_parent=self.root,
+            placement_side="right",
+        )
+        self.left_child = User.objects.create_user(
+            email="left-child@example.com",
+            username="leftchild",
+            password="pass12345",
+            is_approved=True,
+            is_active=True,
+            payment_method="easypaisa",
+            account_number="03000000004",
+            referred_by=self.left,
+            placement_parent=self.left,
+            placement_side="left",
+        )
+
+        BinaryNode.objects.create(user=self.left, parent=self.root, side="left")
+        BinaryNode.objects.create(user=self.right, parent=self.root, side="right")
+        BinaryNode.objects.create(user=self.left_child, parent=self.left, side="left")
+        ensure_wallet(self.root)
+        ensure_wallet(self.left)
+        ensure_wallet(self.right)
+        ensure_wallet(self.left_child)
+        ComplaintFeedback.objects.create(user=self.left, message="Test", type="feedback")
+
+        self.root.left_team_count = 2
+        self.root.right_team_count = 1
+        self.root.pair_count = 1
+        self.root.save(update_fields=["left_team_count", "right_team_count", "pair_count"])
+        self.left.left_team_count = 1
+        self.left.save(update_fields=["left_team_count"])
+
+        self.client.force_authenticate(self.admin)
+
+    def test_admin_can_delete_user_and_entire_subtree(self):
+        response = self.client.delete(f"/api/accounts/admin/users/{self.left.id}/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["deletedCount"], 2)
+        self.assertFalse(User.objects.filter(id=self.left.id).exists())
+        self.assertFalse(User.objects.filter(id=self.left_child.id).exists())
+        self.assertFalse(BinaryNode.objects.filter(user_id=self.left.id).exists())
+        self.assertFalse(BinaryNode.objects.filter(user_id=self.left_child.id).exists())
+        self.assertFalse(ComplaintFeedback.objects.filter(user_id=self.left.id).exists())
+
+        self.root.refresh_from_db()
+        self.right.refresh_from_db()
+        self.assertEqual(self.root.left_team_count, 0)
+        self.assertEqual(self.root.right_team_count, 1)
+        self.assertEqual(self.root.pair_count, 0)
+        self.assertEqual(self.right.referred_by, self.root)

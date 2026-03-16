@@ -1,5 +1,6 @@
 from django.contrib.auth import get_user_model
 from rest_framework import permissions
+from rest_framework.exceptions import NotFound
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -18,6 +19,7 @@ from .serializers import (
     UserSerializer,
 )
 from .services import create_user_from_pin
+from .services import delete_user_subtree
 
 User = get_user_model()
 
@@ -148,8 +150,22 @@ class AdminUserDetailView(APIView):
     permission_classes = [permissions.IsAdminUser]
 
     def patch(self, request, pk):
-        user = User.objects.get(pk=pk)
+        user = User.objects.filter(pk=pk, is_staff=False).first()
+        if not user:
+            raise NotFound("User not found.")
         serializer = AdminUserUpdateSerializer(user, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(AdminUserListSerializer(user, context={"request": request}).data)
+
+    def delete(self, request, pk):
+        user = User.objects.filter(pk=pk, is_staff=False).first()
+        if not user:
+            raise NotFound("User not found.")
+        deleted_count = delete_user_subtree(user=user)
+        return Response(
+            {
+                "detail": "User deleted successfully.",
+                "deletedCount": deleted_count,
+            }
+        )
