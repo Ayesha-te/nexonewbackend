@@ -5,6 +5,7 @@ from network.models import BinaryNode
 from network.services import find_next_open_slot
 from pins.models import Pin
 from rewards.services import award_matching_rewards
+from wallets.models import LedgerEntry
 from wallets.services import credit_wallet, ensure_wallet
 
 User = get_user_model()
@@ -62,6 +63,7 @@ def create_user_from_pin(
         pin.used_by = new_user
         pin.save()
         BinaryNode.objects.create(user=new_user, parent=placement_parent, side=placement_side)
+        award_referral_pair_income(sponsor)
         cascade_team_updates(sponsor, position)
     return new_user
 
@@ -98,6 +100,24 @@ def get_pair_reward_amount(pair_number):
     if pair_number <= 99:
         return 200
     return 100
+
+
+def award_referral_pair_income(user):
+    completed_pairs = user.referrals.count() // 2
+    paid_pairs = LedgerEntry.objects.filter(
+        wallet__user=user,
+        entry_type="referral_pair_income",
+    ).count()
+
+    for pair_number in range(paid_pairs + 1, completed_pairs + 1):
+        amount = get_pair_reward_amount(pair_number)
+        credit_wallet(
+            user,
+            amount,
+            "referral_pair_income",
+            description=f"Referral pair income #{pair_number}",
+            taxable_type="normal",
+        )
 
 
 def collect_subtree_user_ids(root_user_id):

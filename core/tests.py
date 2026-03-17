@@ -8,6 +8,7 @@ from rest_framework.test import APIClient
 import core.automation as automation
 from core.automation import get_automation_status, run_automation_if_needed
 from rewards.models import SalaryLog
+from withdrawals.services import sync_user_pending_withdrawal
 from wallets.services import credit_wallet, ensure_wallet
 from withdrawals.models import AutoWithdrawalLog, Withdrawal
 
@@ -130,3 +131,33 @@ class WithdrawalApprovalApiTests(TestCase):
         processed = next((row for row in my_rows if row["id"] == pending["id"]), None)
         self.assertIsNotNone(processed)
         self.assertEqual(processed["status"], "processed")
+
+
+class ReferralIncomeWithdrawalFlowTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="referral-flow@example.com",
+            username="referral-flow",
+            password="pass12345",
+            is_approved=True,
+            is_active=True,
+            payment_method="easypaisa",
+            account_number="03005555555",
+        )
+        ensure_wallet(self.user)
+
+    def test_referral_pair_income_uses_normal_withdrawal_pipeline(self):
+        credit_wallet(
+            self.user,
+            400,
+            "referral_pair_income",
+            description="Referral pair income #1",
+        )
+
+        pending = sync_user_pending_withdrawal(self.user)
+
+        self.assertIsNotNone(pending)
+        self.assertEqual(pending.amount, 400)
+        self.assertEqual(pending.tax, 20)
+        self.assertEqual(pending.net_amount, 380)
+        self.assertEqual(pending.tax_type, "normal")

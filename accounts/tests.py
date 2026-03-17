@@ -5,6 +5,7 @@ from rest_framework.test import APIClient
 from complaints.models import ComplaintFeedback
 from network.models import BinaryNode
 from pins.models import Pin
+from wallets.models import LedgerEntry
 from wallets.services import ensure_wallet
 
 User = get_user_model()
@@ -72,6 +73,86 @@ class ActivateUserViewTests(TestCase):
         self.assertEqual(pin.status, "used")
         self.assertIsNotNone(pin.used_by)
         self.assertEqual(pin.used_by.email, "child@example.com")
+
+    def test_sponsor_is_not_paid_after_only_one_referral_activation(self):
+        pin = Pin.objects.create(owner=self.user, status="unused", amount=1500)
+
+        response = self.client.post(
+            "/api/accounts/activate/",
+            {
+                "pinToken": pin.code,
+                "firstName": "Ali",
+                "lastName": "Khan",
+                "email": "bonus-child@example.com",
+                "phone": "03007654321",
+                "accountNumber": "03007654321",
+                "referralEmail": self.user.email,
+                "position": "left",
+                "paymentMethod": "easypaisa",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.user.refresh_from_db()
+        referral_entry = LedgerEntry.objects.filter(
+            wallet__user=self.user,
+            entry_type="referral_pair_income",
+        ).first()
+
+        self.assertEqual(self.user.current_income, 0)
+        self.assertIsNone(referral_entry)
+
+    def test_sponsor_is_paid_after_two_referrals_even_on_same_side(self):
+        first_pin = Pin.objects.create(owner=self.user, status="unused", amount=1000)
+        second_pin = Pin.objects.create(owner=self.user, status="unused", amount=1000)
+
+        first_response = self.client.post(
+            "/api/accounts/activate/",
+            {
+                "pinToken": first_pin.code,
+                "firstName": "First",
+                "lastName": "Left",
+                "email": "same-left-1@example.com",
+                "phone": "03117654321",
+                "accountNumber": "03117654321",
+                "referralEmail": self.user.email,
+                "position": "left",
+                "paymentMethod": "easypaisa",
+            },
+            format="json",
+        )
+        second_response = self.client.post(
+            "/api/accounts/activate/",
+            {
+                "pinToken": second_pin.code,
+                "firstName": "Second",
+                "lastName": "Left",
+                "email": "same-left-2@example.com",
+                "phone": "03117654322",
+                "accountNumber": "03117654322",
+                "referralEmail": self.user.email,
+                "position": "left",
+                "paymentMethod": "easypaisa",
+            },
+            format="json",
+        )
+
+        self.assertEqual(first_response.status_code, 201)
+        self.assertEqual(second_response.status_code, 201)
+
+        self.user.refresh_from_db()
+        referral_entry = LedgerEntry.objects.filter(
+            wallet__user=self.user,
+            entry_type="referral_pair_income",
+        ).first()
+
+        self.assertEqual(self.user.left_team_count, 2)
+        self.assertEqual(self.user.right_team_count, 0)
+        self.assertEqual(self.user.pair_count, 0)
+        self.assertEqual(self.user.current_income, 400)
+        self.assertIsNotNone(referral_entry)
+        self.assertEqual(referral_entry.amount, 400)
 
     def test_repeated_left_placements_stay_on_left_chain(self):
         first_pin = Pin.objects.create(owner=self.user, status="unused", amount=1000)
@@ -236,6 +317,7 @@ class ActivateUserViewTests(TestCase):
         self.assertEqual(created_node.parent, sponsor)
         self.assertEqual(created_node.side, "right")
         self.assertEqual(pin.used_by, created_user)
+        self.assertEqual(sponsor.current_income, 0)
         self.assertEqual(sponsor.right_team_count, 1)
         self.assertEqual(self.user.right_team_count, 0)
 
