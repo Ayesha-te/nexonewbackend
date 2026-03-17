@@ -1,6 +1,7 @@
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
 from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -11,6 +12,7 @@ from rewards.models import SalaryLog
 from withdrawals.services import sync_user_pending_withdrawal
 from wallets.services import credit_wallet, ensure_wallet
 from withdrawals.models import AutoWithdrawalLog, Withdrawal
+from wallets.models import LedgerEntry
 
 User = get_user_model()
 
@@ -161,3 +163,50 @@ class ReferralIncomeWithdrawalFlowTests(TestCase):
         self.assertEqual(pending.tax, 20)
         self.assertEqual(pending.net_amount, 380)
         self.assertEqual(pending.tax_type, "normal")
+
+
+class PairIncomeCorrectionCommandTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="pair-fix@example.com",
+            username="pair-fix",
+            password="pass12345",
+            is_approved=True,
+            is_active=True,
+            payment_method="easypaisa",
+            account_number="03006666666",
+        )
+        ensure_wallet(self.user)
+
+    def test_command_reverses_legacy_pair_income_and_updates_pending_withdrawal(self):
+        credit_wallet(
+            self.user,
+            400,
+            "referral_pair_income",
+            description="Valid first set income",
+        )
+        credit_wallet(
+            self.user,
+            400,
+            "pair_income",
+            description="Legacy duplicate binary income",
+        )
+        pending = sync_user_pending_withdrawal(self.user)
+
+        self.assertIsNotNone(pending)
+        self.assertEqual(pending.amount, 800)
+
+        call_command("fix_pair_income_overpayments", "--apply")
+
+        self.user.refresh_from_db()
+        pending.refresh_from_db()
+        reversal = LedgerEntry.objects.filter(
+            wallet__user=self.user,
+            entry_type="pair_income_reversal",
+        ).first()
+
+        self.assertIsNotNone(reversal)
+        self.assertEqual(reversal.amount, -400)
+        self.assertEqual(self.user.current_income, 400)
+        self.assertEqual(self.user.wallet.balance, 400)
+        self.assertEqual(pending.amount, 400)

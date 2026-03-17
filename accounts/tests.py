@@ -154,6 +154,61 @@ class ActivateUserViewTests(TestCase):
         self.assertIsNotNone(referral_entry)
         self.assertEqual(referral_entry.amount, 400)
 
+    def test_sponsor_gets_only_one_set_income_for_first_left_right_pair_of_referrals(self):
+        first_pin = Pin.objects.create(owner=self.user, status="unused", amount=1000)
+        second_pin = Pin.objects.create(owner=self.user, status="unused", amount=1000)
+
+        first_response = self.client.post(
+            "/api/accounts/activate/",
+            {
+                "pinToken": first_pin.code,
+                "firstName": "First",
+                "lastName": "User",
+                "email": "set-left@example.com",
+                "phone": "03330000001",
+                "accountNumber": "03330000001",
+                "referralEmail": self.user.email,
+                "position": "left",
+                "paymentMethod": "easypaisa",
+            },
+            format="json",
+        )
+        second_response = self.client.post(
+            "/api/accounts/activate/",
+            {
+                "pinToken": second_pin.code,
+                "firstName": "Second",
+                "lastName": "User",
+                "email": "set-right@example.com",
+                "phone": "03330000002",
+                "accountNumber": "03330000002",
+                "referralEmail": self.user.email,
+                "position": "right",
+                "paymentMethod": "easypaisa",
+            },
+            format="json",
+        )
+
+        self.assertEqual(first_response.status_code, 201)
+        self.assertEqual(second_response.status_code, 201)
+
+        self.user.refresh_from_db()
+        referral_entries = LedgerEntry.objects.filter(
+            wallet__user=self.user,
+            entry_type="referral_pair_income",
+        )
+        binary_entries = LedgerEntry.objects.filter(
+            wallet__user=self.user,
+            entry_type="pair_income",
+        )
+
+        self.assertEqual(self.user.left_team_count, 1)
+        self.assertEqual(self.user.right_team_count, 1)
+        self.assertEqual(self.user.pair_count, 1)
+        self.assertEqual(self.user.current_income, 400)
+        self.assertEqual(referral_entries.count(), 1)
+        self.assertEqual(binary_entries.count(), 0)
+
     def test_repeated_left_placements_stay_on_left_chain(self):
         first_pin = Pin.objects.create(owner=self.user, status="unused", amount=1000)
         second_pin = Pin.objects.create(owner=self.user, status="unused", amount=1000)

@@ -76,18 +76,9 @@ def cascade_team_updates(user, side):
             current.left_team_count += 1
         else:
             current.right_team_count += 1
-        new_pairs = min(current.left_team_count, current.right_team_count) - current.pair_count
-        if new_pairs > 0 and not current.stop_earnings and current.pair_count < 50000:
-            for pair_number in range(current.pair_count + 1, current.pair_count + new_pairs + 1):
-                amount = get_pair_reward_amount(pair_number)
-                credit_wallet(
-                    current,
-                    amount,
-                    "pair_income",
-                    description=f"Pair income #{pair_number}",
-                    taxable_type="normal",
-                )
-            current.pair_count += new_pairs
+        # Team growth still updates binary metrics, but income is now paid
+        # only on completed 2-user referral sets through award_referral_pair_income.
+        current.pair_count = min(current.left_team_count, current.right_team_count)
         current.save()
         award_matching_rewards(current)
         side_value = current.placement_side
