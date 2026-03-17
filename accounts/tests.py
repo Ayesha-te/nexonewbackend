@@ -194,6 +194,51 @@ class ActivateUserViewTests(TestCase):
         self.assertEqual(self.user.left_team_count, 0)
         self.assertEqual(self.user.right_team_count, 4)
 
+    def test_activation_can_place_user_under_different_referral_email_on_selected_side(self):
+        sponsor = User.objects.create_user(
+            email="sponsor@example.com",
+            username="sponsor",
+            password="pass12345",
+            is_approved=True,
+            is_active=True,
+            payment_method="easypaisa",
+            account_number="03220000000",
+        )
+        pin = Pin.objects.create(owner=self.user, status="unused", amount=1000)
+
+        response = self.client.post(
+            "/api/accounts/activate/",
+            {
+                "pinToken": pin.code,
+                "firstName": "Right",
+                "lastName": "Child",
+                "email": "right-child@example.com",
+                "phone": "03221111111",
+                "accountNumber": "03221111111",
+                "referralEmail": sponsor.email,
+                "position": "right",
+                "paymentMethod": "easypaisa",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+
+        created_user = User.objects.get(email="right-child@example.com")
+        created_node = BinaryNode.objects.get(user=created_user)
+        pin.refresh_from_db()
+        sponsor.refresh_from_db()
+        self.user.refresh_from_db()
+
+        self.assertEqual(created_user.referred_by, sponsor)
+        self.assertEqual(created_user.placement_parent, sponsor)
+        self.assertEqual(created_user.placement_side, "right")
+        self.assertEqual(created_node.parent, sponsor)
+        self.assertEqual(created_node.side, "right")
+        self.assertEqual(pin.used_by, created_user)
+        self.assertEqual(sponsor.right_team_count, 1)
+        self.assertEqual(self.user.right_team_count, 0)
+
 
 class AdminDeleteUserTests(TestCase):
     def setUp(self):

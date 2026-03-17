@@ -24,12 +24,11 @@ def create_user_from_pin(
     payment_method,
 ):
     normalized_sponsor_email = (sponsor_email or "").strip().lower()
-    active_user_email = (activating_user.email or "").strip().lower()
     if not normalized_sponsor_email:
         raise ValueError("Referral email not found.")
-    if normalized_sponsor_email != active_user_email:
-        raise ValueError("Referral email must match your active account email.")
-    sponsor = activating_user
+    sponsor = User.objects.filter(email__iexact=normalized_sponsor_email).first()
+    if not sponsor:
+        raise ValueError("Referral email not found.")
     pin = Pin.objects.filter(code=pin_code, owner=activating_user, status="unused").first()
     if not pin:
         raise ValueError("Pin is invalid or already used.")
