@@ -11,6 +11,7 @@ class UserSerializer(serializers.ModelSerializer):
     available_pins = serializers.SerializerMethodField()
     referral_email = serializers.SerializerMethodField()
     is_active = serializers.BooleanField(read_only=True)
+    system_pair_income_total = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = User
@@ -32,6 +33,8 @@ class UserSerializer(serializers.ModelSerializer):
             "left_team_count",
             "right_team_count",
             "pair_count",
+            "auto_pair_income_pairs",
+            "system_pair_income_total",
             "referral_code",
             "referral_email",
             "is_staff",
@@ -52,6 +55,8 @@ class UserSerializer(serializers.ModelSerializer):
             "left_team_count",
             "right_team_count",
             "pair_count",
+            "auto_pair_income_pairs",
+            "system_pair_income_total",
             "referral_code",
             "referral_email",
             "is_staff",

@@ -27,6 +27,7 @@ class User(AbstractUser):
     left_team_count = models.PositiveIntegerField(default=0)
     right_team_count = models.PositiveIntegerField(default=0)
     pair_count = models.PositiveIntegerField(default=0)
+    auto_pair_income_pairs = models.PositiveIntegerField(default=0)
     current_income = models.PositiveIntegerField(default=0)
     reward_income = models.PositiveIntegerField(default=0)
     total_withdrawn = models.PositiveIntegerField(default=0)
@@ -52,6 +53,18 @@ class User(AbstractUser):
     @property
     def full_name(self):
         return f"{self.first_name} {self.last_name}".strip() or self.username
+
+    @property
+    def system_pair_income_total(self):
+        total = 0
+        for set_number in range(1, self.auto_pair_income_pairs + 1):
+            if set_number == 1:
+                total += 400
+            elif set_number <= 99:
+                total += 200
+            else:
+                total += 100
+        return total
 
 
 class PinActivationRequest(models.Model):

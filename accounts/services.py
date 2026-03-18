@@ -5,7 +5,6 @@ from network.models import BinaryNode
 from network.services import find_next_open_slot
 from pins.models import Pin
 from rewards.services import award_matching_rewards
-from wallets.models import LedgerEntry
 from wallets.services import credit_wallet, ensure_wallet
 
 User = get_user_model()
@@ -63,7 +62,6 @@ def create_user_from_pin(
         pin.used_by = new_user
         pin.save()
         BinaryNode.objects.create(user=new_user, parent=placement_parent, side=placement_side)
-        award_referral_pair_income(sponsor)
         cascade_team_updates(sponsor, position)
     return new_user
 
@@ -76,39 +74,41 @@ def cascade_team_updates(user, side):
             current.left_team_count += 1
         else:
             current.right_team_count += 1
-        # Team growth still updates binary metrics, but income is now paid
-        # only on completed 2-user referral sets through award_referral_pair_income.
         current.pair_count = min(current.left_team_count, current.right_team_count)
-        current.save()
+        current.save(update_fields=["left_team_count", "right_team_count", "pair_count"])
         award_matching_rewards(current)
+        award_binary_set_income(current)
         side_value = current.placement_side
         current = current.placement_parent
 
 
-def get_pair_reward_amount(pair_number):
-    if pair_number == 1:
-        return 400
-    if pair_number <= 99:
-        return 200
-    return 100
+def award_binary_set_income(user):
+    if user.stop_earnings:
+        return
 
+    completed_sets = user.pair_count
+    newly_completed_sets = max(completed_sets - user.auto_pair_income_pairs, 0)
+    if newly_completed_sets <= 0:
+        return
 
-def award_referral_pair_income(user):
-    completed_pairs = user.referrals.count() // 2
-    paid_pairs = LedgerEntry.objects.filter(
-        wallet__user=user,
-        entry_type="referral_pair_income",
-    ).count()
-
-    for pair_number in range(paid_pairs + 1, completed_pairs + 1):
-        amount = get_pair_reward_amount(pair_number)
+    starting_set_number = user.auto_pair_income_pairs
+    for offset in range(newly_completed_sets):
+        set_number = starting_set_number + offset + 1
+        if set_number == 1:
+            amount = 400
+        elif set_number <= 99:
+            amount = 200
+        else:
+            amount = 100
         credit_wallet(
             user,
             amount,
-            "referral_pair_income",
-            description=f"Referral pair income #{pair_number}",
+            "binary_set_income",
+            description=f"Binary set income #{set_number}",
             taxable_type="normal",
         )
+    user.auto_pair_income_pairs += newly_completed_sets
+    user.save(update_fields=["auto_pair_income_pairs"])
 
 
 def collect_subtree_user_ids(root_user_id):

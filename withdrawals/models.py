@@ -20,6 +20,12 @@ class Withdrawal(models.Model):
         default="normal",
     )
     net_amount = models.PositiveIntegerField(default=0)
+    left_team_total = models.PositiveIntegerField(default=0)
+    right_team_total = models.PositiveIntegerField(default=0)
+    matched_pairs = models.PositiveIntegerField(default=0)
+    system_added_earnings = models.PositiveIntegerField(default=0)
+    admin_adjustment = models.IntegerField(default=0)
+    admin_note = models.CharField(max_length=255, blank=True, default="")
     date = models.DateField(default=timezone.now)
     status = models.CharField(
         max_length=16,

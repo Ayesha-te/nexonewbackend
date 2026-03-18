@@ -74,7 +74,7 @@ class ActivateUserViewTests(TestCase):
         self.assertIsNotNone(pin.used_by)
         self.assertEqual(pin.used_by.email, "child@example.com")
 
-    def test_sponsor_is_not_paid_after_only_one_referral_activation(self):
+    def test_sponsor_is_not_paid_after_only_one_binary_side_activation(self):
         pin = Pin.objects.create(owner=self.user, status="unused", amount=1500)
 
         response = self.client.post(
@@ -95,15 +95,15 @@ class ActivateUserViewTests(TestCase):
 
         self.assertEqual(response.status_code, 201)
         self.user.refresh_from_db()
-        referral_entry = LedgerEntry.objects.filter(
+        pair_entry = LedgerEntry.objects.filter(
             wallet__user=self.user,
-            entry_type="referral_pair_income",
+            entry_type="binary_set_income",
         ).first()
 
         self.assertEqual(self.user.current_income, 0)
-        self.assertIsNone(referral_entry)
+        self.assertIsNone(pair_entry)
 
-    def test_sponsor_is_paid_after_two_referrals_even_on_same_side(self):
+    def test_sponsor_is_not_paid_when_two_users_join_on_same_side_only(self):
         first_pin = Pin.objects.create(owner=self.user, status="unused", amount=1000)
         second_pin = Pin.objects.create(owner=self.user, status="unused", amount=1000)
 
@@ -142,19 +142,18 @@ class ActivateUserViewTests(TestCase):
         self.assertEqual(second_response.status_code, 201)
 
         self.user.refresh_from_db()
-        referral_entry = LedgerEntry.objects.filter(
+        pair_entry = LedgerEntry.objects.filter(
             wallet__user=self.user,
-            entry_type="referral_pair_income",
+            entry_type="binary_set_income",
         ).first()
 
         self.assertEqual(self.user.left_team_count, 2)
         self.assertEqual(self.user.right_team_count, 0)
         self.assertEqual(self.user.pair_count, 0)
-        self.assertEqual(self.user.current_income, 400)
-        self.assertIsNotNone(referral_entry)
-        self.assertEqual(referral_entry.amount, 400)
+        self.assertEqual(self.user.current_income, 0)
+        self.assertIsNone(pair_entry)
 
-    def test_sponsor_gets_only_one_set_income_for_first_left_right_pair_of_referrals(self):
+    def test_sponsor_gets_first_binary_set_income_when_left_and_right_match(self):
         first_pin = Pin.objects.create(owner=self.user, status="unused", amount=1000)
         second_pin = Pin.objects.create(owner=self.user, status="unused", amount=1000)
 
@@ -193,21 +192,18 @@ class ActivateUserViewTests(TestCase):
         self.assertEqual(second_response.status_code, 201)
 
         self.user.refresh_from_db()
-        referral_entries = LedgerEntry.objects.filter(
+        pair_entries = LedgerEntry.objects.filter(
             wallet__user=self.user,
-            entry_type="referral_pair_income",
-        )
-        binary_entries = LedgerEntry.objects.filter(
-            wallet__user=self.user,
-            entry_type="pair_income",
+            entry_type="binary_set_income",
         )
 
         self.assertEqual(self.user.left_team_count, 1)
         self.assertEqual(self.user.right_team_count, 1)
         self.assertEqual(self.user.pair_count, 1)
+        self.assertEqual(self.user.auto_pair_income_pairs, 1)
         self.assertEqual(self.user.current_income, 400)
-        self.assertEqual(referral_entries.count(), 1)
-        self.assertEqual(binary_entries.count(), 0)
+        self.assertEqual(pair_entries.count(), 1)
+        self.assertEqual(pair_entries.first().amount, 400)
 
     def test_repeated_left_placements_stay_on_left_chain(self):
         first_pin = Pin.objects.create(owner=self.user, status="unused", amount=1000)

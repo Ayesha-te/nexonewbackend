@@ -65,6 +65,10 @@ def sync_user_pending_withdrawal(user, run_date=None):
         "account_name": user.full_name or user.username or user.email,
         "account_number": user.account_number,
         "tx_id": "",
+        "left_team_total": user.left_team_count,
+        "right_team_total": user.right_team_count,
+        "matched_pairs": user.pair_count,
+        "system_added_earnings": user.system_pair_income_total,
         **amounts,
     }
     if pending:
@@ -89,7 +93,7 @@ def sync_all_pending_withdrawals(run_date=None):
 
 
 @transaction.atomic
-def approve_withdrawal(withdrawal):
+def approve_withdrawal(withdrawal, *, admin_adjustment=0, admin_note=""):
     withdrawal = Withdrawal.objects.select_for_update().select_related("user").get(pk=withdrawal.pk)
     if withdrawal.status != "pending":
         raise ValueError("Withdrawal is already processed.")
@@ -105,8 +109,10 @@ def approve_withdrawal(withdrawal):
         description=f"Withdrawal approved #{withdrawal.id}",
         taxable_type=withdrawal.tax_type,
     )
+    withdrawal.admin_adjustment = admin_adjustment
+    withdrawal.admin_note = admin_note
     withdrawal.status = "processed"
-    withdrawal.save(update_fields=["status"])
+    withdrawal.save(update_fields=["admin_adjustment", "admin_note", "status"])
 
     sync_user_pending_withdrawal(withdrawal.user)
     return withdrawal

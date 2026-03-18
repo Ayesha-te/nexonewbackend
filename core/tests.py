@@ -39,7 +39,7 @@ class AutomationCatchupTests(TestCase):
             credit_wallet(
                 self.user,
                 1000,
-                "pair_income",
+                "binary_set_income",
                 description=f"Income for day {offset + 1}",
             )
 
@@ -109,7 +109,12 @@ class WithdrawalApprovalApiTests(TestCase):
             payment_method="easypaisa",
             account_number="03000000000",
         )
-        credit_wallet(self.user, 400, "pair_income", description="Initial pair income")
+        self.user.left_team_count = 3
+        self.user.right_team_count = 2
+        self.user.pair_count = 2
+        self.user.auto_pair_income_pairs = 2
+        self.user.save(update_fields=["left_team_count", "right_team_count", "pair_count", "auto_pair_income_pairs"])
+        credit_wallet(self.user, 400, "binary_set_income", description="Initial binary set income")
 
     def test_admin_can_approve_pending_withdrawal(self):
         self.client.force_authenticate(self.admin)
@@ -120,10 +125,20 @@ class WithdrawalApprovalApiTests(TestCase):
 
         self.assertIsNotNone(pending)
         self.assertEqual(pending["amount"], 400)
+        self.assertEqual(pending["leftTeamTotal"], 3)
+        self.assertEqual(pending["rightTeamTotal"], 2)
+        self.assertEqual(pending["matchedPairs"], 2)
+        self.assertEqual(pending["systemAddedEarnings"], 400)
 
-        approve_response = self.client.post(f"/api/withdrawals/admin/{pending['id']}/approve/")
+        approve_response = self.client.post(
+            f"/api/withdrawals/admin/{pending['id']}/approve/",
+            {"adminAdjustment": 200, "adminNote": "First pair top-up"},
+            format="json",
+        )
         self.assertEqual(approve_response.status_code, 200)
         self.assertEqual(approve_response.data["status"], "processed")
+        self.assertEqual(approve_response.data["adminAdjustment"], 200)
+        self.assertEqual(approve_response.data["finalAmount"], 600)
 
         self.user.refresh_from_db()
         self.assertEqual(self.user.current_income, 0)
@@ -133,9 +148,11 @@ class WithdrawalApprovalApiTests(TestCase):
         processed = next((row for row in my_rows if row["id"] == pending["id"]), None)
         self.assertIsNotNone(processed)
         self.assertEqual(processed["status"], "processed")
+        self.assertEqual(processed["adminAdjustment"], 200)
+        self.assertEqual(processed["adminNote"], "First pair top-up")
 
 
-class ReferralIncomeWithdrawalFlowTests(TestCase):
+class BinarySetIncomeWithdrawalFlowTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(
             email="referral-flow@example.com",
@@ -148,12 +165,12 @@ class ReferralIncomeWithdrawalFlowTests(TestCase):
         )
         ensure_wallet(self.user)
 
-    def test_referral_pair_income_uses_normal_withdrawal_pipeline(self):
+    def test_binary_set_income_uses_normal_withdrawal_pipeline(self):
         credit_wallet(
             self.user,
             400,
-            "referral_pair_income",
-            description="Referral pair income #1",
+            "binary_set_income",
+            description="Binary set income #1",
         )
 
         pending = sync_user_pending_withdrawal(self.user)
@@ -182,8 +199,8 @@ class PairIncomeCorrectionCommandTests(TestCase):
         credit_wallet(
             self.user,
             400,
-            "referral_pair_income",
-            description="Valid first set income",
+            "binary_set_income",
+            description="Valid binary set income",
         )
         credit_wallet(
             self.user,

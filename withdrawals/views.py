@@ -28,8 +28,19 @@ class AdminApproveWithdrawalView(APIView):
 
     def post(self, request, pk):
         withdrawal = Withdrawal.objects.get(pk=pk)
+        raw_adjustment = request.data.get("adminAdjustment", 0)
+        raw_note = request.data.get("adminNote", "")
         try:
-            withdrawal = approve_withdrawal(withdrawal)
+            admin_adjustment = int(raw_adjustment or 0)
+        except (TypeError, ValueError):
+            return Response({"detail": "Admin adjustment must be a valid whole number."}, status=400)
+
+        try:
+            withdrawal = approve_withdrawal(
+                withdrawal,
+                admin_adjustment=admin_adjustment,
+                admin_note=str(raw_note or "").strip(),
+            )
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=400)
         return Response(WithdrawalSerializer(withdrawal).data)
