@@ -28,6 +28,9 @@ REWARD_ROWS = [
 
 
 def seed_reward_tiers():
+    if RewardTier.objects.exists():
+        return
+
     for sequence, left_target, right_target, reward, amount in REWARD_ROWS:
         RewardTier.objects.get_or_create(
             sequence=sequence,
@@ -41,7 +44,6 @@ def seed_reward_tiers():
 
 
 def award_matching_rewards(user):
-    seed_reward_tiers()
     for tier in RewardTier.objects.all().order_by("sequence"):
         if user.left_team_count >= tier.left_target and user.right_team_count >= tier.right_target:
             reward_obj, created = UserReward.objects.get_or_create(user=user, tier=tier)

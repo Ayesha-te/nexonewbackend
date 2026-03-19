@@ -3,7 +3,7 @@ from threading import Lock
 
 from django.utils import timezone
 
-from rewards.services import process_monthly_salary, seed_reward_tiers
+from rewards.services import process_monthly_salary
 from withdrawals.models import AutoWithdrawalLog
 from withdrawals.services import process_daily_auto_withdrawals
 
@@ -53,7 +53,6 @@ def run_automation_if_needed():
     with _automation_lock:
         if _last_checked_date == today:
             return False
-        seed_reward_tiers()
         last_log = AutoWithdrawalLog.objects.order_by("-run_date").first()
         start_date = last_log.run_date + timedelta(days=1) if last_log else today
 

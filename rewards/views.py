@@ -3,14 +3,12 @@ from rest_framework.views import APIView
 
 from .models import RewardTier
 from .serializers import RewardTierSerializer, UserRewardSerializer
-from .services import seed_reward_tiers
 
 
 class RewardPlanView(APIView):
     permission_classes = []
 
     def get(self, request):
-        seed_reward_tiers()
         return Response(RewardTierSerializer(RewardTier.objects.all().order_by("sequence"), many=True).data)
 
 

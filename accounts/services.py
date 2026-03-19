@@ -66,10 +66,13 @@ def create_user_from_pin(
     return new_user
 
 
-def cascade_team_updates(user, side):
+def cascade_team_updates(user, side, max_depth=10):
     current = user
     side_value = side
-    while current:
+    depth = 0
+
+    while current and depth < max_depth:
+        print("Processing user:", current.id)
         if side_value == "left":
             current.left_team_count += 1
         else:
@@ -80,6 +83,7 @@ def cascade_team_updates(user, side):
         award_binary_set_income(current)
         side_value = current.placement_side
         current = current.placement_parent
+        depth += 1
 
 
 def award_binary_set_income(user):

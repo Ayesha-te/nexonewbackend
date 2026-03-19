@@ -10,7 +10,7 @@ class RewardTier(models.Model):
     right_target = models.PositiveIntegerField()
     reward = models.CharField(max_length=128)
     amount = models.PositiveIntegerField(default=0)
-    sequence = models.PositiveIntegerField(unique=True)
+    sequence = models.PositiveIntegerField(unique=True, db_index=True)
 
 
 class UserReward(models.Model):
