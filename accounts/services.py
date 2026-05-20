@@ -130,7 +130,7 @@ def collect_subtree_user_ids(root_user_id):
     return subtree_ids
 
 
-def rebuild_network_metrics():
+def rebuild_network_metrics(*, sync_paid_pairs=False):
     users = {
         user.id: user
         for user in User.objects.filter(is_staff=False)
@@ -155,15 +155,21 @@ def rebuild_network_metrics():
         user.left_team_count = left_count
         user.right_team_count = right_count
         user.pair_count = min(left_count, right_count)
+        if sync_paid_pairs and user.auto_pair_income_pairs > user.pair_count:
+            user.auto_pair_income_pairs = user.pair_count
 
         return left_count + right_count
 
     for user_id in users:
         compute_counts(user_id)
 
+    update_fields = ["left_team_count", "right_team_count", "pair_count"]
+    if sync_paid_pairs:
+        update_fields.append("auto_pair_income_pairs")
+
     User.objects.bulk_update(
         users.values(),
-        ["left_team_count", "right_team_count", "pair_count"],
+        update_fields,
     )
 
 
@@ -175,5 +181,5 @@ def delete_user_subtree(*, user):
     subtree_ids = collect_subtree_user_ids(user.id)
     deleted_count = len(subtree_ids)
     User.objects.filter(id__in=subtree_ids, is_staff=False).delete()
-    rebuild_network_metrics()
+    rebuild_network_metrics(sync_paid_pairs=True)
     return deleted_count

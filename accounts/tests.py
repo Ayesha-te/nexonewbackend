@@ -7,6 +7,7 @@ from network.models import BinaryNode
 from pins.models import Pin
 from wallets.models import LedgerEntry
 from wallets.services import ensure_wallet
+from accounts.services import award_binary_set_income, create_user_from_pin
 
 User = get_user_model()
 
@@ -462,3 +463,52 @@ class AdminDeleteUserTests(TestCase):
         self.assertEqual(self.root.right_team_count, 1)
         self.assertEqual(self.root.pair_count, 0)
         self.assertEqual(self.right.referred_by, self.root)
+
+    def test_deleting_a_subtree_resets_paid_pair_progress_for_replacement_accounts(self):
+        award_binary_set_income(self.root)
+        self.root.refresh_from_db()
+        self.assertEqual(self.root.auto_pair_income_pairs, 1)
+        self.assertEqual(
+            LedgerEntry.objects.filter(
+                wallet__user=self.root,
+                entry_type="binary_set_income",
+            ).count(),
+            1,
+        )
+
+        response = self.client.delete(f"/api/accounts/admin/users/{self.left.id}/")
+
+        self.assertEqual(response.status_code, 200)
+        self.root.refresh_from_db()
+        self.assertEqual(self.root.left_team_count, 0)
+        self.assertEqual(self.root.right_team_count, 1)
+        self.assertEqual(self.root.pair_count, 0)
+        self.assertEqual(self.root.auto_pair_income_pairs, 0)
+
+        replacement_pin = Pin.objects.create(owner=self.root, status="unused", amount=1000)
+        create_user_from_pin(
+            activating_user=self.root,
+            sponsor_email=self.root.email,
+            pin_code=replacement_pin.code,
+            first_name="Replacement",
+            last_name="Left",
+            email="replacement-left@example.com",
+            phone="03005550000",
+            account_number="03005550000",
+            position="left",
+            payment_method="easypaisa",
+        )
+
+        self.root.refresh_from_db()
+        pair_entries = LedgerEntry.objects.filter(
+            wallet__user=self.root,
+            entry_type="binary_set_income",
+        ).order_by("created_at")
+
+        self.assertEqual(self.root.left_team_count, 1)
+        self.assertEqual(self.root.right_team_count, 1)
+        self.assertEqual(self.root.pair_count, 1)
+        self.assertEqual(self.root.auto_pair_income_pairs, 1)
+        self.assertEqual(self.root.current_income, 800)
+        self.assertEqual(pair_entries.count(), 2)
+        self.assertEqual(pair_entries.last().amount, 400)
