@@ -6,7 +6,7 @@ from complaints.models import ComplaintFeedback
 from network.models import BinaryNode
 from pins.models import Pin
 from wallets.models import LedgerEntry
-from wallets.services import ensure_wallet
+from wallets.services import credit_wallet, ensure_wallet
 from accounts.services import award_binary_set_income, create_user_from_pin
 
 User = get_user_model()
@@ -372,6 +372,70 @@ class ActivateUserViewTests(TestCase):
         self.assertEqual(sponsor.current_income, 0)
         self.assertEqual(sponsor.right_team_count, 1)
         self.assertEqual(self.user.right_team_count, 0)
+
+    def test_stale_paid_pairs_do_not_block_new_pair_income(self):
+        right_pin = Pin.objects.create(owner=self.user, status="unused", amount=1000)
+        right_response = self.client.post(
+            "/api/accounts/activate/",
+            {
+                "pinToken": right_pin.code,
+                "firstName": "Only",
+                "lastName": "Right",
+                "email": "stale-right@example.com",
+                "phone": "03009990001",
+                "accountNumber": "03009990001",
+                "referralEmail": self.user.email,
+                "position": "right",
+                "paymentMethod": "easypaisa",
+            },
+            format="json",
+        )
+        self.assertEqual(right_response.status_code, 201)
+
+        self.user.refresh_from_db()
+        self.user.auto_pair_income_pairs = 1
+        self.user.save(
+            update_fields=[
+                "auto_pair_income_pairs",
+            ]
+        )
+        credit_wallet(
+            self.user,
+            400,
+            "binary_set_income",
+            description="Historical pair income before subtree shrink",
+        )
+
+        left_pin = Pin.objects.create(owner=self.user, status="unused", amount=1000)
+        left_response = self.client.post(
+            "/api/accounts/activate/",
+            {
+                "pinToken": left_pin.code,
+                "firstName": "Replacement",
+                "lastName": "Left",
+                "email": "replacement-left@example.com",
+                "phone": "03009990002",
+                "accountNumber": "03009990002",
+                "referralEmail": self.user.email,
+                "position": "left",
+                "paymentMethod": "easypaisa",
+            },
+            format="json",
+        )
+        self.assertEqual(left_response.status_code, 201)
+
+        self.user.refresh_from_db()
+        pair_entries = LedgerEntry.objects.filter(
+            wallet__user=self.user,
+            entry_type="binary_set_income",
+        ).order_by("created_at")
+
+        self.assertEqual(self.user.left_team_count, 1)
+        self.assertEqual(self.user.right_team_count, 1)
+        self.assertEqual(self.user.pair_count, 1)
+        self.assertEqual(self.user.auto_pair_income_pairs, 1)
+        self.assertEqual(pair_entries.count(), 2)
+        self.assertEqual(pair_entries.last().amount, 400)
 
 
 class AdminDeleteUserTests(TestCase):

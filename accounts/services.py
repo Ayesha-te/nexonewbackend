@@ -73,6 +73,7 @@ def cascade_team_updates(user, side, max_depth=10):
 
     while current and depth < max_depth:
         print("Processing user:", current.id)
+        previous_pair_count = current.pair_count
         if side_value == "left":
             current.left_team_count += 1
         else:
@@ -80,22 +81,27 @@ def cascade_team_updates(user, side, max_depth=10):
         current.pair_count = min(current.left_team_count, current.right_team_count)
         current.save(update_fields=["left_team_count", "right_team_count", "pair_count"])
         award_matching_rewards(current)
-        award_binary_set_income(current)
+        award_binary_set_income(current, previous_pair_count=previous_pair_count)
         side_value = current.placement_side
         current = current.placement_parent
         depth += 1
 
 
-def award_binary_set_income(user):
+def award_binary_set_income(user, previous_pair_count=None):
     if user.stop_earnings:
         return
 
     completed_sets = user.pair_count
-    newly_completed_sets = max(completed_sets - user.auto_pair_income_pairs, 0)
+    paid_pairs_floor = completed_sets if previous_pair_count is None else previous_pair_count
+    baseline_paid_pairs = min(user.auto_pair_income_pairs, paid_pairs_floor)
+    newly_completed_sets = max(completed_sets - baseline_paid_pairs, 0)
     if newly_completed_sets <= 0:
+        if user.auto_pair_income_pairs != baseline_paid_pairs:
+            user.auto_pair_income_pairs = baseline_paid_pairs
+            user.save(update_fields=["auto_pair_income_pairs"])
         return
 
-    starting_set_number = user.auto_pair_income_pairs
+    starting_set_number = baseline_paid_pairs
     for offset in range(newly_completed_sets):
         set_number = starting_set_number + offset + 1
         if set_number == 1:
@@ -111,7 +117,7 @@ def award_binary_set_income(user):
             description=f"Binary set income #{set_number}",
             taxable_type="normal",
         )
-    user.auto_pair_income_pairs += newly_completed_sets
+    user.auto_pair_income_pairs = baseline_paid_pairs + newly_completed_sets
     user.save(update_fields=["auto_pair_income_pairs"])
 
 
