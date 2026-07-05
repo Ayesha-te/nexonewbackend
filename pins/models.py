@@ -9,17 +9,19 @@ PIN_PRICE = 1000
 MIN_PIN_PURCHASE_QUANTITY = 1
 MAX_PIN_PURCHASE_QUANTITY = 1000
 PIN_PURCHASE_DISABLED_MESSAGE = "PIN/Token Purchase is temporarily unavailable. Please try again later."
+SUPPORTED_PIN_PAYMENT_METHODS = ("JazzCash", "Easypaisa", "Bank Account")
 
 
 def default_pin_payment_methods():
     return [
         {
-            "paymentMethod": "Easypaisa",
-            "accountTitle": "Sardar Laeiq Ahmed",
-            "accountNumber": "03448252109",
-            "instructions": "Send payment to this Easypaisa account and submit your transaction ID or proof screenshot for admin approval.",
+            "paymentMethod": method,
+            "accountTitle": "Sardar Laeiq Ahmed" if method == "Easypaisa" else "",
+            "accountNumber": "03448252109" if method == "Easypaisa" else "",
+            "instructions": "",
             "qrCodeUrl": None,
         }
+        for method in SUPPORTED_PIN_PAYMENT_METHODS
     ]
 
 

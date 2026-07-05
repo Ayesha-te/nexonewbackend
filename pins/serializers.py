@@ -1,6 +1,14 @@
 from rest_framework import serializers
 
-from .models import MAX_PIN_PURCHASE_QUANTITY, MIN_PIN_PURCHASE_QUANTITY, PIN_PRICE, Pin, PinPurchaseSettings, PinRequest
+from .models import (
+    MAX_PIN_PURCHASE_QUANTITY,
+    MIN_PIN_PURCHASE_QUANTITY,
+    PIN_PRICE,
+    SUPPORTED_PIN_PAYMENT_METHODS,
+    Pin,
+    PinPurchaseSettings,
+    PinRequest,
+)
 
 
 class PinSerializer(serializers.ModelSerializer):
@@ -139,27 +147,31 @@ class PinPurchaseSettingsSerializer(serializers.ModelSerializer):
 
     def get_paymentMethods(self, obj):
         request = self.context.get("request")
-        methods = obj.payment_methods or []
-        if not methods:
-            qr_url = obj.qr_code.url if obj.qr_code else None
-            methods = [
-                {
-                    "accountTitle": obj.account_title,
-                    "accountNumber": obj.account_number,
-                    "paymentMethod": obj.payment_method,
-                    "instructions": obj.instructions,
-                    "qrCodeUrl": qr_url,
-                }
-            ]
+        saved_methods = obj.payment_methods or []
+        methods_by_name = {
+            str(method.get("paymentMethod", "")).strip(): method
+            for method in saved_methods
+            if isinstance(method, dict)
+        }
+
+        if obj.payment_method and obj.payment_method not in methods_by_name:
+            methods_by_name[obj.payment_method] = {
+                "accountTitle": obj.account_title,
+                "accountNumber": obj.account_number,
+                "paymentMethod": obj.payment_method,
+                "instructions": obj.instructions,
+                "qrCodeUrl": obj.qr_code.url if obj.qr_code else None,
+            }
 
         normalized = []
-        for method in methods:
+        for payment_method in SUPPORTED_PIN_PAYMENT_METHODS:
+            method = methods_by_name.get(payment_method, {})
             qr_url = method.get("qrCodeUrl")
             normalized.append(
                 {
                     "accountTitle": method.get("accountTitle", ""),
                     "accountNumber": method.get("accountNumber", ""),
-                    "paymentMethod": method.get("paymentMethod", ""),
+                    "paymentMethod": payment_method,
                     "instructions": method.get("instructions", ""),
                     "qrCodeUrl": request.build_absolute_uri(qr_url) if request and qr_url and qr_url.startswith("/") else qr_url,
                 }
