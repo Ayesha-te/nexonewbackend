@@ -96,6 +96,7 @@ class AdminPinSettingsView(APIView):
     def post(self, request):
         settings = PinPurchaseSettings.current()
         settings.purchase_enabled = str(request.data.get("purchaseEnabled", "true")).lower() == "true"
+        settings.available_again_time = str(request.data.get("availableAgainTime", "")).strip()
 
         raw_methods = request.data.get("paymentMethods")
         if raw_methods:

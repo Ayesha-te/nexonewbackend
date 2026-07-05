@@ -33,6 +33,7 @@ class PinPurchaseSettings(models.Model):
     )
 
     purchase_enabled = models.BooleanField(default=True)
+    available_again_time = models.CharField(max_length=32, blank=True, default="")
     account_title = models.CharField(max_length=128, default="Sardar Laeiq Ahmed")
     account_number = models.CharField(max_length=64, default="03448252109")
     payment_method = models.CharField(max_length=32, choices=PAYMENT_METHOD_CHOICES, default="Easypaisa")

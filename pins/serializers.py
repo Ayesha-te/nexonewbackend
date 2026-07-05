@@ -100,6 +100,7 @@ class PinRequestCreateSerializer(serializers.ModelSerializer):
 
 class PinPurchaseSettingsSerializer(serializers.ModelSerializer):
     purchaseEnabled = serializers.BooleanField(source="purchase_enabled")
+    availableAgainTime = serializers.CharField(source="available_again_time")
     disabledMessage = serializers.SerializerMethodField()
     pinPrice = serializers.SerializerMethodField()
     minQuantity = serializers.SerializerMethodField()
@@ -111,6 +112,7 @@ class PinPurchaseSettingsSerializer(serializers.ModelSerializer):
         model = PinPurchaseSettings
         fields = [
             "purchaseEnabled",
+            "availableAgainTime",
             "disabledMessage",
             "pinPrice",
             "minQuantity",
@@ -181,6 +183,7 @@ class PinPurchaseSettingsSerializer(serializers.ModelSerializer):
 
 class PinPurchaseSettingsUpdateSerializer(serializers.ModelSerializer):
     purchaseEnabled = serializers.BooleanField(source="purchase_enabled")
+    availableAgainTime = serializers.CharField(source="available_again_time", required=False, allow_blank=True, max_length=32)
     accountTitle = serializers.CharField(source="account_title", max_length=128)
     accountNumber = serializers.CharField(source="account_number", max_length=64)
     paymentMethod = serializers.ChoiceField(source="payment_method", choices=PinPurchaseSettings.PAYMENT_METHOD_CHOICES)
@@ -188,4 +191,4 @@ class PinPurchaseSettingsUpdateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = PinPurchaseSettings
-        fields = ["purchaseEnabled", "accountTitle", "accountNumber", "paymentMethod", "instructions", "qrCode"]
+        fields = ["purchaseEnabled", "availableAgainTime", "accountTitle", "accountNumber", "paymentMethod", "instructions", "qrCode"]
