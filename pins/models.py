@@ -20,6 +20,7 @@ def default_pin_payment_methods():
             "accountNumber": "03448252109" if method == "Easypaisa" else "",
             "instructions": "",
             "qrCodeUrl": None,
+            "active": method == "Easypaisa",
         }
         for method in SUPPORTED_PIN_PAYMENT_METHODS
     ]

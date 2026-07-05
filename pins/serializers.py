@@ -99,7 +99,7 @@ class PinRequestCreateSerializer(serializers.ModelSerializer):
 
 
 class PinPurchaseSettingsSerializer(serializers.ModelSerializer):
-    purchaseEnabled = serializers.BooleanField(source="purchase_enabled")
+    purchaseEnabled = serializers.SerializerMethodField()
     availableAgainTime = serializers.CharField(source="available_again_time")
     disabledMessage = serializers.SerializerMethodField()
     pinPrice = serializers.SerializerMethodField()
@@ -126,6 +126,9 @@ class PinPurchaseSettingsSerializer(serializers.ModelSerializer):
 
         return PIN_PURCHASE_DISABLED_MESSAGE
 
+    def get_purchaseEnabled(self, obj):
+        return any(bool(method.get("active")) for method in self.get_paymentMethods(obj))
+
     def get_pinPrice(self, obj):
         return PIN_PRICE
 
@@ -137,6 +140,9 @@ class PinPurchaseSettingsSerializer(serializers.ModelSerializer):
 
     def get_paymentDetails(self, obj):
         methods = self.get_paymentMethods(obj)
+        active_methods = [method for method in methods if method.get("active")]
+        if active_methods:
+            return active_methods[0]
         if methods:
             return methods[0]
         return {
@@ -166,9 +172,13 @@ class PinPurchaseSettingsSerializer(serializers.ModelSerializer):
             }
 
         normalized = []
+        active_seen = False
         for payment_method in SUPPORTED_PIN_PAYMENT_METHODS:
             method = methods_by_name.get(payment_method, {})
             qr_url = method.get("qrCodeUrl")
+            is_active = bool(method.get("active")) and not active_seen
+            if is_active:
+                active_seen = True
             normalized.append(
                 {
                     "accountTitle": method.get("accountTitle", ""),
@@ -176,6 +186,7 @@ class PinPurchaseSettingsSerializer(serializers.ModelSerializer):
                     "paymentMethod": payment_method,
                     "instructions": method.get("instructions", ""),
                     "qrCodeUrl": request.build_absolute_uri(qr_url) if request and qr_url and qr_url.startswith("/") else qr_url,
+                    "active": is_active,
                 }
             )
         return normalized

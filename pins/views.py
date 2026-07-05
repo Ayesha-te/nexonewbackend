@@ -16,6 +16,10 @@ from .serializers import (
 )
 
 
+def has_active_pin_payment_method(settings):
+    return any(bool(method.get("active")) for method in (settings.payment_methods or []))
+
+
 class MyPinsView(APIView):
     def get(self, request):
         return Response(PinSerializer(request.user.pins.all().order_by("-created_at"), many=True).data)
@@ -33,7 +37,7 @@ class PinRequestView(APIView):
 
     def post(self, request):
         settings = PinPurchaseSettings.current()
-        if not settings.purchase_enabled:
+        if not has_active_pin_payment_method(settings):
             return Response({"detail": PIN_PURCHASE_DISABLED_MESSAGE}, status=403)
 
         serializer = PinRequestCreateSerializer(data=request.data)
@@ -95,7 +99,6 @@ class AdminPinSettingsView(APIView):
 
     def post(self, request):
         settings = PinPurchaseSettings.current()
-        settings.purchase_enabled = str(request.data.get("purchaseEnabled", "true")).lower() == "true"
         settings.available_again_time = str(request.data.get("availableAgainTime", "")).strip()
 
         raw_methods = request.data.get("paymentMethods")
@@ -116,20 +119,26 @@ class AdminPinSettingsView(APIView):
             ]
 
         cleaned_methods = []
+        active_method_seen = False
         for index, method in enumerate(payment_methods):
             payment_method = str(method.get("paymentMethod", "")).strip()
             account_title = str(method.get("accountTitle", "")).strip()
             account_number = str(method.get("accountNumber", "")).strip()
             instructions = str(method.get("instructions", "")).strip()
             qr_code_url = method.get("qrCodeUrl") or None
+            is_active = bool(method.get("active")) and not active_method_seen
+            if is_active:
+                active_method_seen = True
 
             upload = request.FILES.get(f"qrCode_{index}")
             if upload:
                 saved_path = default_storage.save(f"pin-payment-qr/{upload.name}", upload)
                 qr_code_url = default_storage.url(saved_path)
 
-            if not payment_method or not account_title or not account_number:
-                return Response({"detail": "Each payment method needs method, account title, and account number."}, status=400)
+            if not payment_method:
+                return Response({"detail": "Each payment method needs a method name."}, status=400)
+            if is_active and (not account_title or not account_number):
+                return Response({"detail": "The active payment method needs account title and account number."}, status=400)
 
             cleaned_methods.append(
                 {
@@ -138,6 +147,7 @@ class AdminPinSettingsView(APIView):
                     "accountNumber": account_number,
                     "instructions": instructions,
                     "qrCodeUrl": qr_code_url,
+                    "active": is_active,
                 }
             )
 
@@ -150,5 +160,6 @@ class AdminPinSettingsView(APIView):
         settings.account_number = first_method["accountNumber"]
         settings.instructions = first_method["instructions"]
         settings.payment_methods = cleaned_methods
+        settings.purchase_enabled = any(method["active"] for method in cleaned_methods)
         settings.save()
         return Response(PinPurchaseSettingsSerializer(settings, context={"request": request}).data)
