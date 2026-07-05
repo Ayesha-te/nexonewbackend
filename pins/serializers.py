@@ -97,10 +97,19 @@ class PinPurchaseSettingsSerializer(serializers.ModelSerializer):
     minQuantity = serializers.SerializerMethodField()
     maxQuantity = serializers.SerializerMethodField()
     paymentDetails = serializers.SerializerMethodField()
+    paymentMethods = serializers.SerializerMethodField()
 
     class Meta:
         model = PinPurchaseSettings
-        fields = ["purchaseEnabled", "disabledMessage", "pinPrice", "minQuantity", "maxQuantity", "paymentDetails"]
+        fields = [
+            "purchaseEnabled",
+            "disabledMessage",
+            "pinPrice",
+            "minQuantity",
+            "maxQuantity",
+            "paymentDetails",
+            "paymentMethods",
+        ]
 
     def get_disabledMessage(self, obj):
         from .models import PIN_PURCHASE_DISABLED_MESSAGE
@@ -117,15 +126,45 @@ class PinPurchaseSettingsSerializer(serializers.ModelSerializer):
         return MAX_PIN_PURCHASE_QUANTITY
 
     def get_paymentDetails(self, obj):
-        request = self.context.get("request")
-        qr_url = obj.qr_code.url if obj.qr_code else None
+        methods = self.get_paymentMethods(obj)
+        if methods:
+            return methods[0]
         return {
             "accountTitle": obj.account_title,
             "accountNumber": obj.account_number,
             "paymentMethod": obj.payment_method,
             "instructions": obj.instructions,
-            "qrCodeUrl": request.build_absolute_uri(qr_url) if request and qr_url else qr_url,
+            "qrCodeUrl": None,
         }
+
+    def get_paymentMethods(self, obj):
+        request = self.context.get("request")
+        methods = obj.payment_methods or []
+        if not methods:
+            qr_url = obj.qr_code.url if obj.qr_code else None
+            methods = [
+                {
+                    "accountTitle": obj.account_title,
+                    "accountNumber": obj.account_number,
+                    "paymentMethod": obj.payment_method,
+                    "instructions": obj.instructions,
+                    "qrCodeUrl": qr_url,
+                }
+            ]
+
+        normalized = []
+        for method in methods:
+            qr_url = method.get("qrCodeUrl")
+            normalized.append(
+                {
+                    "accountTitle": method.get("accountTitle", ""),
+                    "accountNumber": method.get("accountNumber", ""),
+                    "paymentMethod": method.get("paymentMethod", ""),
+                    "instructions": method.get("instructions", ""),
+                    "qrCodeUrl": request.build_absolute_uri(qr_url) if request and qr_url and qr_url.startswith("/") else qr_url,
+                }
+            )
+        return normalized
 
 
 class PinPurchaseSettingsUpdateSerializer(serializers.ModelSerializer):

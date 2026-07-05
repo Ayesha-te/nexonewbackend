@@ -11,6 +11,18 @@ MAX_PIN_PURCHASE_QUANTITY = 1000
 PIN_PURCHASE_DISABLED_MESSAGE = "PIN/Token Purchase is temporarily unavailable. Please try again later."
 
 
+def default_pin_payment_methods():
+    return [
+        {
+            "paymentMethod": "Easypaisa",
+            "accountTitle": "Sardar Laeiq Ahmed",
+            "accountNumber": "03448252109",
+            "instructions": "Send payment to this Easypaisa account and submit your transaction ID or proof screenshot for admin approval.",
+            "qrCodeUrl": None,
+        }
+    ]
+
+
 class PinPurchaseSettings(models.Model):
     PAYMENT_METHOD_CHOICES = (
         ("JazzCash", "JazzCash"),
@@ -26,6 +38,7 @@ class PinPurchaseSettings(models.Model):
         default="Send payment to this Easypaisa account and submit your transaction ID or proof screenshot for admin approval."
     )
     qr_code = models.FileField(upload_to="pin-payment-qr/", null=True, blank=True)
+    payment_methods = models.JSONField(default=default_pin_payment_methods, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     @classmethod

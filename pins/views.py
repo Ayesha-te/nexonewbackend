@@ -1,3 +1,6 @@
+import json
+
+from django.core.files.storage import default_storage
 from django.shortcuts import get_object_or_404
 from rest_framework import permissions
 from rest_framework.response import Response
@@ -7,7 +10,6 @@ from django.utils import timezone
 from .models import PIN_PRICE, PIN_PURCHASE_DISABLED_MESSAGE, Pin, PinPurchaseSettings, PinRequest
 from .serializers import (
     PinPurchaseSettingsSerializer,
-    PinPurchaseSettingsUpdateSerializer,
     PinRequestCreateSerializer,
     PinRequestSerializer,
     PinSerializer,
@@ -93,10 +95,59 @@ class AdminPinSettingsView(APIView):
 
     def post(self, request):
         settings = PinPurchaseSettings.current()
-        data = request.data.copy()
-        if "proofFile" in request.FILES:
-            data["qrCode"] = request.FILES["proofFile"]
-        serializer = PinPurchaseSettingsUpdateSerializer(settings, data=data, partial=True)
-        serializer.is_valid(raise_exception=True)
-        settings = serializer.save()
+        settings.purchase_enabled = str(request.data.get("purchaseEnabled", "true")).lower() == "true"
+
+        raw_methods = request.data.get("paymentMethods")
+        if raw_methods:
+            try:
+                payment_methods = json.loads(raw_methods)
+            except json.JSONDecodeError:
+                return Response({"detail": "Invalid payment methods data."}, status=400)
+        else:
+            payment_methods = [
+                {
+                    "paymentMethod": request.data.get("paymentMethod", settings.payment_method),
+                    "accountTitle": request.data.get("accountTitle", settings.account_title),
+                    "accountNumber": request.data.get("accountNumber", settings.account_number),
+                    "instructions": request.data.get("instructions", settings.instructions),
+                    "qrCodeUrl": settings.qr_code.url if settings.qr_code else None,
+                }
+            ]
+
+        cleaned_methods = []
+        for index, method in enumerate(payment_methods):
+            payment_method = str(method.get("paymentMethod", "")).strip()
+            account_title = str(method.get("accountTitle", "")).strip()
+            account_number = str(method.get("accountNumber", "")).strip()
+            instructions = str(method.get("instructions", "")).strip()
+            qr_code_url = method.get("qrCodeUrl") or None
+
+            upload = request.FILES.get(f"qrCode_{index}")
+            if upload:
+                saved_path = default_storage.save(f"pin-payment-qr/{upload.name}", upload)
+                qr_code_url = default_storage.url(saved_path)
+
+            if not payment_method or not account_title or not account_number:
+                return Response({"detail": "Each payment method needs method, account title, and account number."}, status=400)
+
+            cleaned_methods.append(
+                {
+                    "paymentMethod": payment_method,
+                    "accountTitle": account_title,
+                    "accountNumber": account_number,
+                    "instructions": instructions,
+                    "qrCodeUrl": qr_code_url,
+                }
+            )
+
+        if not cleaned_methods:
+            return Response({"detail": "At least one payment method is required."}, status=400)
+
+        first_method = cleaned_methods[0]
+        settings.payment_method = first_method["paymentMethod"]
+        settings.account_title = first_method["accountTitle"]
+        settings.account_number = first_method["accountNumber"]
+        settings.instructions = first_method["instructions"]
+        settings.payment_methods = cleaned_methods
+        settings.save()
         return Response(PinPurchaseSettingsSerializer(settings, context={"request": request}).data)
