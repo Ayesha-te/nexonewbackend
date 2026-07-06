@@ -20,6 +20,7 @@ def create_user_from_pin(
     email,
     phone,
     account_number,
+    bank_name,
     position,
     payment_method,
 ):
@@ -50,6 +51,7 @@ def create_user_from_pin(
             last_name=last_name,
             phone=phone,
             account_number=account_number,
+            bank_name=bank_name,
             payment_method=payment_method,
             referred_by=sponsor,
             placement_parent=placement_parent,

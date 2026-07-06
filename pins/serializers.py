@@ -148,6 +148,7 @@ class PinPurchaseSettingsSerializer(serializers.ModelSerializer):
         return {
             "accountTitle": obj.account_title,
             "accountNumber": obj.account_number,
+            "bankName": "",
             "paymentMethod": obj.payment_method,
             "instructions": obj.instructions,
             "qrCodeUrl": None,
@@ -166,6 +167,7 @@ class PinPurchaseSettingsSerializer(serializers.ModelSerializer):
             methods_by_name[obj.payment_method] = {
                 "accountTitle": obj.account_title,
                 "accountNumber": obj.account_number,
+                "bankName": "",
                 "paymentMethod": obj.payment_method,
                 "instructions": obj.instructions,
                 "qrCodeUrl": obj.qr_code.url if obj.qr_code else None,
@@ -183,6 +185,7 @@ class PinPurchaseSettingsSerializer(serializers.ModelSerializer):
                 {
                     "accountTitle": method.get("accountTitle", ""),
                     "accountNumber": method.get("accountNumber", ""),
+                    "bankName": method.get("bankName", ""),
                     "paymentMethod": payment_method,
                     "instructions": method.get("instructions", ""),
                     "qrCodeUrl": request.build_absolute_uri(qr_url) if request and qr_url and qr_url.startswith("/") else qr_url,

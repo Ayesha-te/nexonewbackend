@@ -1,6 +1,8 @@
 import json
 
+from django.contrib.auth import get_user_model
 from django.core.files.storage import default_storage
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
 from rest_framework import permissions
 from rest_framework.response import Response
@@ -14,6 +16,8 @@ from .serializers import (
     PinRequestSerializer,
     PinSerializer,
 )
+
+User = get_user_model()
 
 
 def has_active_pin_payment_method(settings):
@@ -91,6 +95,40 @@ class AdminPinRequestView(APIView):
         return Response(PinRequestSerializer(pin_request, context={"request": request}).data)
 
 
+class AdminPinBalancesView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def get(self, request):
+        users = (
+            User.objects.filter(pins__isnull=False, is_staff=False)
+            .annotate(
+                total_pins=Count("pins", distinct=True),
+                available_pins=Count("pins", filter=Q(pins__status="unused"), distinct=True),
+                used_pins=Count("pins", filter=Q(pins__status="used"), distinct=True),
+            )
+            .filter(total_pins__gt=0)
+            .order_by("-available_pins", "-total_pins", "email")
+        )
+
+        rows = []
+        for user in users:
+            rows.append(
+                {
+                    "userId": user.id,
+                    "userName": user.full_name,
+                    "email": user.email,
+                    "phone": user.phone,
+                    "accountNumber": user.account_number,
+                    "paymentMethod": user.payment_method,
+                    "bankName": user.bank_name,
+                    "totalPins": user.total_pins,
+                    "availablePins": user.available_pins,
+                    "usedPins": user.used_pins,
+                }
+            )
+        return Response(rows)
+
+
 class AdminPinSettingsView(APIView):
     permission_classes = [permissions.IsAdminUser]
 
@@ -113,6 +151,7 @@ class AdminPinSettingsView(APIView):
                     "paymentMethod": request.data.get("paymentMethod", settings.payment_method),
                     "accountTitle": request.data.get("accountTitle", settings.account_title),
                     "accountNumber": request.data.get("accountNumber", settings.account_number),
+                    "bankName": request.data.get("bankName", ""),
                     "instructions": request.data.get("instructions", settings.instructions),
                     "qrCodeUrl": settings.qr_code.url if settings.qr_code else None,
                 }
@@ -124,6 +163,7 @@ class AdminPinSettingsView(APIView):
             payment_method = str(method.get("paymentMethod", "")).strip()
             account_title = str(method.get("accountTitle", "")).strip()
             account_number = str(method.get("accountNumber", "")).strip()
+            bank_name = str(method.get("bankName", "")).strip()
             instructions = str(method.get("instructions", "")).strip()
             qr_code_url = method.get("qrCodeUrl") or None
             is_active = bool(method.get("active")) and not active_method_seen
@@ -139,12 +179,15 @@ class AdminPinSettingsView(APIView):
                 return Response({"detail": "Each payment method needs a method name."}, status=400)
             if is_active and (not account_title or not account_number):
                 return Response({"detail": "The active payment method needs account title and account number."}, status=400)
+            if is_active and payment_method == "Bank Account" and not bank_name:
+                return Response({"detail": "The active bank account payment method needs a bank name."}, status=400)
 
             cleaned_methods.append(
                 {
                     "paymentMethod": payment_method,
                     "accountTitle": account_title,
                     "accountNumber": account_number,
+                    "bankName": bank_name,
                     "instructions": instructions,
                     "qrCodeUrl": qr_code_url,
                     "active": is_active,

@@ -41,6 +41,8 @@ def get_payment_label(payment_method):
         return "EasyPaisa"
     if payment_method == "jazzcash":
         return "JazzCash"
+    if payment_method == "bank_account":
+        return "Bank Account"
     return payment_method or "Account"
 
 
@@ -61,7 +63,7 @@ def sync_user_pending_withdrawal(user, run_date=None):
     amounts = calculate_withdrawal_amounts(balance)
     payload = {
         "payment_method": user.payment_method,
-        "bank_name": get_payment_label(user.payment_method),
+        "bank_name": user.bank_name if user.payment_method == "bank_account" else get_payment_label(user.payment_method),
         "account_name": user.full_name or user.username or user.email,
         "account_number": user.account_number,
         "tx_id": "",

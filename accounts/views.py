@@ -8,7 +8,7 @@ from rest_framework.views import APIView
 from core.automation import get_automation_status
 from network.services import build_tree_payload
 
-from .models import PinActivationRequest
+from .models import PinActivationRequest, SiteSetting
 from .serializers import (
     AdminUserListSerializer,
     AdminUserUpdateSerializer,
@@ -73,6 +73,7 @@ class ActivateUserView(APIView):
                 email=data["email"],
                 phone=data["phone"],
                 account_number=data["accountNumber"],
+                bank_name=data.get("bankName", ""),
                 position=data["position"],
                 payment_method=data["paymentMethod"],
             )
@@ -86,6 +87,7 @@ class ActivateUserView(APIView):
             email=data["email"],
             phone=data["phone"],
             account_number=data["accountNumber"],
+            bank_name=data.get("bankName", ""),
             referral_email=data["referralEmail"],
             position=data["position"],
             payment_method=data["paymentMethod"],
@@ -142,6 +144,49 @@ class AdminSystemStatusView(APIView):
                 "lastAutomationRun": status["last_run_date"],
                 "ranToday": status["ran_today"],
                 "pendingBackfillDays": status["pending_backfill_days"],
+            }
+        )
+
+
+class SiteSettingsView(APIView):
+    def get(self, request):
+        settings = SiteSetting.current()
+        return Response(
+            {
+                "usdRatePkr": float(settings.usd_rate_pkr),
+                "updatedAt": settings.updated_at,
+            }
+        )
+
+
+class AdminSiteSettingsView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def get(self, request):
+        settings = SiteSetting.current()
+        return Response(
+            {
+                "usdRatePkr": float(settings.usd_rate_pkr),
+                "updatedAt": settings.updated_at,
+            }
+        )
+
+    def post(self, request):
+        try:
+            usd_rate_pkr = float(request.data.get("usdRatePkr", 0))
+        except (TypeError, ValueError):
+            return Response({"detail": "USD rate must be a valid number."}, status=400)
+
+        if usd_rate_pkr <= 0:
+            return Response({"detail": "USD rate must be greater than 0."}, status=400)
+
+        settings = SiteSetting.current()
+        settings.usd_rate_pkr = usd_rate_pkr
+        settings.save(update_fields=["usd_rate_pkr", "updated_at"])
+        return Response(
+            {
+                "usdRatePkr": float(settings.usd_rate_pkr),
+                "updatedAt": settings.updated_at,
             }
         )
 

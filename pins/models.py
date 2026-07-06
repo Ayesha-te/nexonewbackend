@@ -18,6 +18,7 @@ def default_pin_payment_methods():
             "paymentMethod": method,
             "accountTitle": "Sardar Laeiq Ahmed" if method == "Easypaisa" else "",
             "accountNumber": "03448252109" if method == "Easypaisa" else "",
+            "bankName": "",
             "instructions": "",
             "qrCodeUrl": None,
             "active": method == "Easypaisa",

@@ -22,6 +22,7 @@ class UserSerializer(serializers.ModelSerializer):
             "phone",
             "account_number",
             "payment_method",
+            "bank_name",
             "name",
             "first_name",
             "last_name",
@@ -48,6 +49,7 @@ class UserSerializer(serializers.ModelSerializer):
             "phone",
             "account_number",
             "payment_method",
+            "bank_name",
             "current_income",
             "reward_income",
             "total_withdrawn",
@@ -100,9 +102,18 @@ class PinActivationSerializer(serializers.Serializer):
     email = serializers.EmailField()
     phone = serializers.CharField()
     accountNumber = serializers.CharField()
+    bankName = serializers.CharField(required=False, allow_blank=True)
     referralEmail = serializers.EmailField()
     position = serializers.ChoiceField(choices=["left", "right"])
-    paymentMethod = serializers.ChoiceField(choices=["easypaisa", "jazzcash"])
+    paymentMethod = serializers.ChoiceField(choices=["easypaisa", "jazzcash", "bank_account"])
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        if attrs.get("paymentMethod") == "bank_account" and not attrs.get("bankName", "").strip():
+            raise serializers.ValidationError({"bankName": "Bank name is required when payment method is Bank Account."})
+        if attrs.get("paymentMethod") != "bank_account":
+            attrs["bankName"] = ""
+        return attrs
 
 
 class ChangePasswordSerializer(serializers.Serializer):
@@ -127,6 +138,8 @@ class AdminUserListSerializer(serializers.ModelSerializer):
     referralEmail = serializers.SerializerMethodField()
     position = serializers.CharField(source="placement_side")
     paymentMethod = serializers.CharField(source="payment_method")
+    accountNumber = serializers.CharField(source="account_number")
+    bankName = serializers.CharField(source="bank_name")
     firstName = serializers.CharField(source="first_name")
     lastName = serializers.CharField(source="last_name")
 
@@ -142,6 +155,8 @@ class AdminUserListSerializer(serializers.ModelSerializer):
             "referralEmail",
             "position",
             "paymentMethod",
+            "accountNumber",
+            "bankName",
             "isActive",
             "leftTeam",
             "rightTeam",

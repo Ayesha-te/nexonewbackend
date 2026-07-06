@@ -559,6 +559,7 @@ class AdminDeleteUserTests(TestCase):
             email="replacement-left@example.com",
             phone="03005550000",
             account_number="03005550000",
+            bank_name="",
             position="left",
             payment_method="easypaisa",
         )

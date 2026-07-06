@@ -11,9 +11,10 @@ class User(AbstractUser):
     account_number = models.CharField(max_length=64, blank=True)
     payment_method = models.CharField(
         max_length=20,
-        choices=(("easypaisa", "EasyPaisa"), ("jazzcash", "JazzCash")),
+        choices=(("easypaisa", "EasyPaisa"), ("jazzcash", "JazzCash"), ("bank_account", "Bank Account")),
         default="easypaisa",
     )
+    bank_name = models.CharField(max_length=128, blank=True, default="")
     referral_code = models.CharField(max_length=12, unique=True, blank=True)
     referred_by = models.ForeignKey(
         "self", related_name="referrals", on_delete=models.SET_NULL, null=True, blank=True
@@ -79,8 +80,9 @@ class PinActivationRequest(models.Model):
     position = models.CharField(max_length=5, choices=(("left", "Left"), ("right", "Right")))
     payment_method = models.CharField(
         max_length=20,
-        choices=(("easypaisa", "EasyPaisa"), ("jazzcash", "JazzCash")),
+        choices=(("easypaisa", "EasyPaisa"), ("jazzcash", "JazzCash"), ("bank_account", "Bank Account")),
     )
+    bank_name = models.CharField(max_length=128, blank=True, default="")
     status = models.CharField(
         max_length=16,
         choices=(("completed", "Completed"), ("failed", "Failed")),
@@ -95,3 +97,13 @@ class SignupLead(models.Model):
     account_number = models.CharField(max_length=64)
     referral_email = models.EmailField(blank=True)
     created_at = models.DateTimeField(default=timezone.now)
+
+
+class SiteSetting(models.Model):
+    usd_rate_pkr = models.DecimalField(max_digits=10, decimal_places=2, default=280)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    @classmethod
+    def current(cls):
+        settings, _created = cls.objects.get_or_create(pk=1)
+        return settings

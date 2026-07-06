@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 
-from .models import PinActivationRequest, SignupLead, User
+from .models import PinActivationRequest, SignupLead, SiteSetting, User
 
 
 @admin.register(User)
@@ -16,6 +16,7 @@ class UserAdmin(BaseUserAdmin):
                     "phone",
                     "account_number",
                     "payment_method",
+                    "bank_name",
                     "referral_code",
                     "referred_by",
                     "placement_parent",
@@ -37,3 +38,4 @@ class UserAdmin(BaseUserAdmin):
 
 admin.site.register(PinActivationRequest)
 admin.site.register(SignupLead)
+admin.site.register(SiteSetting)
