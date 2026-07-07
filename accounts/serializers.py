@@ -174,3 +174,34 @@ class AdminUserListSerializer(serializers.ModelSerializer):
 
     def get_referralEmail(self, obj):
         return obj.referred_by.email if obj.referred_by else ""
+
+
+class LeaderboardUserSerializer(serializers.ModelSerializer):
+    userId = serializers.IntegerField(source="id")
+    userName = serializers.CharField(source="full_name")
+    profilePic = serializers.SerializerMethodField()
+    currentIncome = serializers.IntegerField(source="current_income")
+    rewardIncome = serializers.IntegerField(source="reward_income")
+    totalIncome = serializers.IntegerField()
+    leftTeam = serializers.IntegerField(source="left_team_count")
+    rightTeam = serializers.IntegerField(source="right_team_count")
+
+    class Meta:
+        model = User
+        fields = [
+            "userId",
+            "userName",
+            "email",
+            "profilePic",
+            "currentIncome",
+            "rewardIncome",
+            "totalIncome",
+            "leftTeam",
+            "rightTeam",
+        ]
+
+    def get_profilePic(self, obj):
+        if not obj.profile_picture:
+            return ""
+        request = self.context.get("request")
+        return request.build_absolute_uri(obj.profile_picture.url) if request else obj.profile_picture.url

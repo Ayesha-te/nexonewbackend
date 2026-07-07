@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.db.models import F
 from rest_framework import permissions
 from rest_framework.exceptions import NotFound
 from rest_framework.parsers import FormParser, MultiPartParser
@@ -13,6 +14,7 @@ from .serializers import (
     AdminUserListSerializer,
     AdminUserUpdateSerializer,
     ChangePasswordSerializer,
+    LeaderboardUserSerializer,
     PinActivationSerializer,
     ProfileUpdateSerializer,
     SignupLeadSerializer,
@@ -107,6 +109,18 @@ class ActivateUserView(APIView):
 class MyTreeView(APIView):
     def get(self, request):
         return Response(build_tree_payload(request.user))
+
+
+class LeaderboardView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        leaders = (
+            User.objects.filter(is_staff=False, is_active=True)
+            .annotate(totalIncome=F("current_income") + F("reward_income"))
+            .order_by("-totalIncome", "-current_income", "-reward_income", "id")[:3]
+        )
+        return Response(LeaderboardUserSerializer(leaders, many=True, context={"request": request}).data)
 
 
 class AdminDashboardView(APIView):
