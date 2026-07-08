@@ -180,24 +180,21 @@ class LeaderboardUserSerializer(serializers.ModelSerializer):
     userId = serializers.IntegerField(source="id")
     userName = serializers.CharField(source="full_name")
     profilePic = serializers.SerializerMethodField()
-    currentIncome = serializers.IntegerField(source="current_income")
-    rewardIncome = serializers.IntegerField(source="reward_income")
+    currentIncome = serializers.IntegerField()
+    weeklyIncome = serializers.IntegerField()
+    monthlyIncome = serializers.IntegerField()
     totalIncome = serializers.IntegerField()
-    leftTeam = serializers.IntegerField(source="left_team_count")
-    rightTeam = serializers.IntegerField(source="right_team_count")
 
     class Meta:
         model = User
         fields = [
             "userId",
             "userName",
-            "email",
             "profilePic",
             "currentIncome",
-            "rewardIncome",
+            "weeklyIncome",
+            "monthlyIncome",
             "totalIncome",
-            "leftTeam",
-            "rightTeam",
         ]
 
     def get_profilePic(self, obj):

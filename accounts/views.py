@@ -1,5 +1,9 @@
+from datetime import timedelta
+
 from django.contrib.auth import get_user_model
-from django.db.models import F
+from django.db.models import F, IntegerField, Q, Sum, Value
+from django.db.models.functions import Coalesce
+from django.utils import timezone
 from rest_framework import permissions
 from rest_framework.exceptions import NotFound
 from rest_framework.parsers import FormParser, MultiPartParser
@@ -8,6 +12,8 @@ from rest_framework.views import APIView
 
 from core.automation import get_automation_status
 from network.services import build_tree_payload
+from wallets.models import LedgerEntry
+from withdrawals.models import Withdrawal
 
 from .models import PinActivationRequest, SiteSetting
 from .serializers import (
@@ -115,12 +121,136 @@ class LeaderboardView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
+        now = timezone.localtime()
+        week_start = now - timedelta(days=7)
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         leaders = (
             User.objects.filter(is_staff=False, is_active=True)
-            .annotate(totalIncome=F("current_income") + F("reward_income"))
-            .order_by("-totalIncome", "-current_income", "-reward_income", "id")[:3]
+            .annotate(
+                currentIncome=F("current_income"),
+                weeklyIncome=Coalesce(
+                    Sum(
+                        "wallet__entries__amount",
+                        filter=Q(wallet__entries__amount__gt=0, wallet__entries__created_at__gte=week_start),
+                    ),
+                    Value(0),
+                    output_field=IntegerField(),
+                ),
+                monthlyIncome=Coalesce(
+                    Sum(
+                        "wallet__entries__amount",
+                        filter=Q(wallet__entries__amount__gt=0, wallet__entries__created_at__gte=month_start),
+                    ),
+                    Value(0),
+                    output_field=IntegerField(),
+                ),
+                totalIncome=Coalesce(
+                    Sum("wallet__entries__amount", filter=Q(wallet__entries__amount__gt=0)),
+                    F("current_income") + F("reward_income"),
+                    output_field=IntegerField(),
+                ),
+            )
+            .filter(totalIncome__gte=100)
+            .order_by("-totalIncome", "-monthlyIncome", "-weeklyIncome", "id")[:3]
         )
         return Response(LeaderboardUserSerializer(leaders, many=True, context={"request": request}).data)
+
+
+class IncomeHistoryView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        now = timezone.localtime()
+        today = now.date()
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        last_month_end = month_start
+        last_month_start = (month_start - timedelta(days=1)).replace(day=1)
+        three_month_start = (month_start - timedelta(days=75)).replace(day=1)
+        week_start = now - timedelta(days=7)
+
+        entries = LedgerEntry.objects.filter(wallet__user=request.user, amount__gt=0)
+
+        def total_since(start, end=None):
+            qs = entries.filter(created_at__gte=start)
+            if end is not None:
+                qs = qs.filter(created_at__lt=end)
+            return qs.aggregate(total=Coalesce(Sum("amount"), Value(0), output_field=IntegerField()))["total"]
+
+        monthly_history = []
+        for offset in range(5, -1, -1):
+            first_day = (month_start - timedelta(days=offset * 31)).replace(day=1)
+            next_month = (first_day + timedelta(days=32)).replace(day=1)
+            monthly_history.append(
+                {
+                    "label": first_day.strftime("%b %Y"),
+                    "amount": total_since(first_day, next_month),
+                }
+            )
+
+        weekly_history = []
+        for offset in range(5, -1, -1):
+            start_date = today - timedelta(days=(offset + 1) * 7)
+            end_date = today - timedelta(days=offset * 7)
+            weekly_history.append(
+                {
+                    "label": f"{start_date.strftime('%d %b')} - {end_date.strftime('%d %b')}",
+                    "amount": entries.filter(created_at__date__gte=start_date, created_at__date__lt=end_date)
+                    .aggregate(total=Coalesce(Sum("amount"), Value(0), output_field=IntegerField()))["total"],
+                }
+            )
+
+        total_income = entries.aggregate(total=Coalesce(Sum("amount"), Value(0), output_field=IntegerField()))["total"]
+        current_month = total_since(month_start)
+        last_month = total_since(last_month_start, last_month_end)
+        last_three_months = total_since(three_month_start)
+        weekly_income = total_since(week_start)
+
+        return Response(
+            {
+                "currentIncome": request.user.current_income,
+                "currentMonthIncome": current_month,
+                "lastMonthIncome": last_month,
+                "last3MonthsIncome": last_three_months,
+                "weeklyIncome": weekly_income,
+                "totalIncome": total_income or (request.user.current_income + request.user.reward_income),
+                "monthlyHistory": monthly_history,
+                "weeklyHistory": weekly_history,
+            }
+        )
+
+
+class DashboardNotificationsView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        hour = timezone.localtime().hour
+        greeting = "Good Morning" if hour < 12 else "Good Afternoon" if hour < 17 else "Good Evening"
+        messages = [f"Assalam-o-Alaikum, {greeting}. Keep growing your Nexocart network."]
+
+        latest_entries = (
+            LedgerEntry.objects.filter(amount__gt=0)
+            .select_related("wallet__user")
+            .order_by("-created_at")[:5]
+        )
+        for entry in latest_entries:
+            name = entry.wallet.user.full_name
+            messages.append(f"Congratulations {name}, income received: PKR {entry.amount:,}.")
+
+        latest_withdrawals = (
+            Withdrawal.objects.filter(status="processed")
+            .select_related("user")
+            .order_by("-created_at")[:5]
+        )
+        for withdrawal in latest_withdrawals:
+            messages.append(f"Withdrawal Successful: {withdrawal.user.full_name} received PKR {withdrawal.net_amount:,}.")
+
+        if request.user.left_team_count or request.user.right_team_count:
+            messages.append(f"Team Growth Update: Left {request.user.left_team_count} / Right {request.user.right_team_count}.")
+
+        if request.user.reward_income > 0:
+            messages.append(f"Reward Achieved: You have earned PKR {request.user.reward_income:,} reward income.")
+
+        return Response({"messages": messages[:12]})
 
 
 class AdminDashboardView(APIView):
