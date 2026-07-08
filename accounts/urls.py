@@ -3,6 +3,7 @@ from django.urls import path
 from .views import (
     ActivateUserView,
     AdminDashboardView,
+    AdminPasswordResetView,
     AdminSiteSettingsView,
     AdminSystemStatusView,
     AdminUserDetailView,
@@ -28,6 +29,7 @@ urlpatterns = [
     path("notifications/", DashboardNotificationsView.as_view()),
     path("settings/", SiteSettingsView.as_view()),
     path("admin/dashboard/", AdminDashboardView.as_view()),
+    path("admin/reset-password/", AdminPasswordResetView.as_view()),
     path("admin/settings/", AdminSiteSettingsView.as_view()),
     path("admin/system-status/", AdminSystemStatusView.as_view()),
     path("admin/users/", AdminUsersView.as_view()),

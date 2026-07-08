@@ -3,6 +3,7 @@ from datetime import timedelta
 from django.contrib.auth import get_user_model
 from django.db.models import F, IntegerField, Q, Sum, Value
 from django.db.models.functions import Coalesce
+from django.utils.crypto import get_random_string
 from django.utils import timezone
 from rest_framework import permissions
 from rest_framework.exceptions import NotFound
@@ -275,6 +276,32 @@ class AdminUsersView(APIView):
     def get(self, request):
         users = User.objects.filter(is_staff=False).order_by("-created_at")
         return Response(AdminUserListSerializer(users, many=True, context={"request": request}).data)
+
+
+class AdminPasswordResetView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def post(self, request):
+        email = str(request.data.get("email", "")).strip()
+        if not email:
+            return Response({"detail": "Email is required."}, status=400)
+
+        user = User.objects.filter(email__iexact=email, is_staff=False).first()
+        if not user:
+            return Response({"detail": "User not found."}, status=404)
+
+        new_password = f"NX-{get_random_string(4).upper()}-{get_random_string(4).upper()}"
+        user.set_password(new_password)
+        user.save(update_fields=["password"])
+
+        return Response(
+            {
+                "detail": "Password reset successfully.",
+                "email": user.email,
+                "userName": user.full_name,
+                "newPassword": new_password,
+            }
+        )
 
 
 class AdminSystemStatusView(APIView):
