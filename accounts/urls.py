@@ -14,6 +14,7 @@ from .views import (
     LeaderboardView,
     MeView,
     MyTreeView,
+    PerfumeDiscountLinkView,
     SiteSettingsView,
     SignupView,
 )
@@ -27,6 +28,7 @@ urlpatterns = [
     path("leaderboard/", LeaderboardView.as_view()),
     path("income-history/", IncomeHistoryView.as_view()),
     path("notifications/", DashboardNotificationsView.as_view()),
+    path("perfume-discount-link/", PerfumeDiscountLinkView.as_view()),
     path("settings/", SiteSettingsView.as_view()),
     path("admin/dashboard/", AdminDashboardView.as_view()),
     path("admin/reset-password/", AdminPasswordResetView.as_view()),

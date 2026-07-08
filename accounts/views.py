@@ -1,6 +1,12 @@
+import base64
+import hashlib
+import hmac
+import json
 from datetime import timedelta
+from urllib.parse import urlencode
 
 from django.contrib.auth import get_user_model
+from django.conf import settings
 from django.db.models import F, IntegerField, Q, Sum, Value
 from django.db.models.functions import Coalesce
 from django.utils.crypto import get_random_string
@@ -252,6 +258,37 @@ class DashboardNotificationsView(APIView):
             messages.append(f"Reward Achieved: You have earned PKR {request.user.reward_income:,} reward income.")
 
         return Response({"messages": messages[:12]})
+
+
+class PerfumeDiscountLinkView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        expires_at = timezone.now() + timedelta(days=30)
+        payload = {
+            "uid": request.user.id,
+            "email": request.user.email,
+            "name": request.user.full_name,
+            "discount": 10,
+            "exp": int(expires_at.timestamp()),
+        }
+        payload_bytes = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+        encoded_payload = base64.urlsafe_b64encode(payload_bytes).decode("ascii").rstrip("=")
+        signature = hmac.new(
+            settings.NEXOCART_DISCOUNT_SECRET.encode("utf-8"),
+            encoded_payload.encode("ascii"),
+            hashlib.sha256,
+        ).digest()
+        encoded_signature = base64.urlsafe_b64encode(signature).decode("ascii").rstrip("=")
+        token = f"{encoded_payload}.{encoded_signature}"
+        query = urlencode({"nexo_offer": token})
+        return Response(
+            {
+                "url": f"{settings.PERFUME_SHOP_URL}?{query}",
+                "discountPercentage": 10,
+                "expiresAt": expires_at,
+            }
+        )
 
 
 class AdminDashboardView(APIView):
