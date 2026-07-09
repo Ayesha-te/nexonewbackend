@@ -19,6 +19,8 @@ from rest_framework.views import APIView
 
 from core.automation import get_automation_status
 from network.services import build_tree_payload
+from pins.models import PinRequest
+from rewards.models import UserReward
 from wallets.models import LedgerEntry
 from withdrawals.models import Withdrawal
 
@@ -296,6 +298,19 @@ class AdminDashboardView(APIView):
 
     def get(self, request):
         users = User.objects.filter(is_staff=False)
+        total_deposit = PinRequest.objects.filter(status="approved").aggregate(
+            total=Coalesce(Sum("amount"), Value(0), output_field=IntegerField())
+        )["total"]
+        processed_withdrawals = Withdrawal.objects.filter(status="processed").only(
+            "net_amount",
+            "admin_adjustment",
+        )
+        total_withdrawal = sum(max(row.net_amount + row.admin_adjustment, 0) for row in processed_withdrawals)
+        total_rewards_paid = UserReward.objects.aggregate(
+            total=Coalesce(Sum("tier__amount"), Value(0), output_field=IntegerField())
+        )["total"]
+        net_system_profit = total_deposit - total_withdrawal - total_rewards_paid
+
         return Response(
             {
                 "totalUsers": users.count(),
@@ -303,6 +318,10 @@ class AdminDashboardView(APIView):
                 "totalCurrentIncome": sum(x.current_income for x in users),
                 "totalRewardIncome": sum(x.reward_income for x in users),
                 "pendingPinRequests": sum(u.pin_requests.filter(status="pending").count() for u in users),
+                "totalDeposit": total_deposit,
+                "totalWithdrawal": total_withdrawal,
+                "totalRewardsPaid": total_rewards_paid,
+                "netSystemProfit": net_system_profit,
             }
         )
 
