@@ -1,5 +1,3 @@
-import base64
-
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
@@ -81,8 +79,6 @@ class UserSerializer(serializers.ModelSerializer):
         return obj.referred_by.email if obj.referred_by else ""
 
     def get_profile_picture(self, obj):
-        if obj.profile_picture_data_url:
-            return obj.profile_picture_data_url
         if not obj.profile_picture:
             return ""
         request = self.context.get("request")
@@ -93,25 +89,6 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ["first_name", "last_name", "profile_picture"]
-
-    def update(self, instance, validated_data):
-        uploaded_picture = validated_data.get("profile_picture")
-        data_url = None
-
-        if uploaded_picture:
-            content = uploaded_picture.read()
-            uploaded_picture.seek(0)
-            content_type = getattr(uploaded_picture, "content_type", None) or "image/jpeg"
-            encoded = base64.b64encode(content).decode("ascii")
-            data_url = f"data:{content_type};base64,{encoded}"
-
-        instance = super().update(instance, validated_data)
-
-        if data_url is not None:
-            instance.profile_picture_data_url = data_url
-            instance.save(update_fields=["profile_picture_data_url"])
-
-        return instance
 
 
 class SignupLeadSerializer(serializers.ModelSerializer):
@@ -197,8 +174,6 @@ class AdminUserListSerializer(serializers.ModelSerializer):
         ]
 
     def get_profilePic(self, obj):
-        if obj.profile_picture_data_url:
-            return obj.profile_picture_data_url
         if not obj.profile_picture:
             return ""
         request = self.context.get("request")
@@ -230,8 +205,6 @@ class LeaderboardUserSerializer(serializers.ModelSerializer):
         ]
 
     def get_profilePic(self, obj):
-        if obj.profile_picture_data_url:
-            return obj.profile_picture_data_url
         if not obj.profile_picture:
             return ""
         request = self.context.get("request")

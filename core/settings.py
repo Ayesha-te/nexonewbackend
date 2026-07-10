@@ -129,5 +129,6 @@ CORS_ALLOW_ALL_ORIGINS = True
 
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
+RUN_AUTOMATION_ON_REQUEST = os.environ.get("RUN_AUTOMATION_ON_REQUEST", "false").lower() == "true"
 PERFUME_SHOP_URL = os.environ.get("PERFUME_SHOP_URL", "https://perfume.nexocart.online")
 NEXOCART_DISCOUNT_SECRET = "nexocart-perfume-dashboard-10-off"
