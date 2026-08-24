@@ -129,9 +129,27 @@ class ChangePasswordSerializer(serializers.Serializer):
 
 
 class AdminUserUpdateSerializer(serializers.ModelSerializer):
+    paymentMethod = serializers.ChoiceField(
+        source="payment_method",
+        choices=["easypaisa", "jazzcash", "bank_account"],
+        required=False,
+    )
+    accountNumber = serializers.CharField(source="account_number", required=False, allow_blank=True)
+    bankName = serializers.CharField(source="bank_name", required=False, allow_blank=True)
+
     class Meta:
         model = User
-        fields = ["email", "phone", "is_active", "stop_earnings"]
+        fields = ["email", "phone", "is_active", "stop_earnings", "paymentMethod", "accountNumber", "bankName"]
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        payment_method = attrs.get("payment_method", getattr(self.instance, "payment_method", None))
+        bank_name = attrs.get("bank_name", getattr(self.instance, "bank_name", ""))
+        if payment_method == "bank_account" and not (bank_name or "").strip():
+            raise serializers.ValidationError({"bankName": "Bank name is required when payment method is Bank Account."})
+        if payment_method != "bank_account" and "bank_name" in attrs:
+            attrs["bank_name"] = ""
+        return attrs
 
 
 class AdminUserListSerializer(serializers.ModelSerializer):
