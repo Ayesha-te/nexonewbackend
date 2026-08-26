@@ -24,7 +24,7 @@ from rewards.models import UserReward
 from wallets.models import LedgerEntry
 from withdrawals.models import Withdrawal
 
-from .models import PinActivationRequest, SiteSetting
+from .models import PinActivationRequest, SignupLead, SiteSetting
 from .serializers import (
     AdminUserListSerializer,
     AdminUserUpdateSerializer,
@@ -298,6 +298,7 @@ class AdminDashboardView(APIView):
 
     def get(self, request):
         users = User.objects.filter(is_staff=False)
+        today = timezone.localdate()
         total_deposit = PinRequest.objects.filter(status="approved").aggregate(
             total=Coalesce(Sum("amount"), Value(0), output_field=IntegerField())
         )["total"]
@@ -310,6 +311,10 @@ class AdminDashboardView(APIView):
             total=Coalesce(Sum("tier__amount"), Value(0), output_field=IntegerField())
         )["total"]
         net_system_profit = total_deposit - total_withdrawal - total_rewards_paid
+        today_joinings = SignupLead.objects.filter(created_at__date=today).count()
+        today_activations = PinActivationRequest.objects.filter(
+            status="completed", created_at__date=today
+        ).count()
 
         return Response(
             {
@@ -322,6 +327,8 @@ class AdminDashboardView(APIView):
                 "totalWithdrawal": total_withdrawal,
                 "totalRewardsPaid": total_rewards_paid,
                 "netSystemProfit": net_system_profit,
+                "todayJoinings": today_joinings,
+                "todayActivations": today_activations,
             }
         )
 
