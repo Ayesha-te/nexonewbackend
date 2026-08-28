@@ -46,11 +46,18 @@ def get_payment_label(payment_method):
     return payment_method or "Account"
 
 
+@transaction.atomic
 def sync_user_pending_withdrawal(user, run_date=None):
     run_date = run_date or date.today()
+    # Lock the user row so concurrent syncs/approvals for this same user (triggered by
+    # simultaneous admin list loads, bulk approvals, etc.) are serialized instead of racing
+    # on a "check for pending row, then create one" read-then-write, which previously could
+    # produce two duplicate pending rows for the same balance.
+    user = User.objects.select_for_update().get(pk=user.pk)
     balance, _wallet = get_withdrawable_balance(user)
     pending = (
-        Withdrawal.objects.filter(user=user, status="pending", auto_generated=True)
+        Withdrawal.objects.select_for_update()
+        .filter(user=user, status="pending", auto_generated=True)
         .order_by("-date", "-id")
         .first()
     )
@@ -96,16 +103,23 @@ def sync_all_pending_withdrawals(run_date=None):
 
 @transaction.atomic
 def approve_withdrawal(withdrawal, *, admin_adjustment=0, admin_note=""):
-    withdrawal = Withdrawal.objects.select_for_update().select_related("user").get(pk=withdrawal.pk)
+    # Lock the user row before the withdrawal row, in that order, matching
+    # sync_user_pending_withdrawal's lock order below. If this user somehow has more than
+    # one pending withdrawal, or a concurrent request is approving another one of theirs
+    # (or syncing their pending row) at the same time, this forces those calls to run one
+    # after another instead of racing on the same balance, and the consistent ordering
+    # avoids the two code paths deadlocking against each other.
+    user = User.objects.select_for_update().get(pk=withdrawal.user_id)
+    withdrawal = Withdrawal.objects.select_for_update().get(pk=withdrawal.pk)
     if withdrawal.status != "pending":
         raise ValueError("Withdrawal is already processed.")
 
-    balance, _wallet = get_withdrawable_balance(withdrawal.user)
+    balance, _wallet = get_withdrawable_balance(user)
     if balance < withdrawal.amount:
         raise ValueError("User does not have enough balance for this withdrawal anymore.")
 
     debit_wallet(
-        withdrawal.user,
+        user,
         withdrawal.amount,
         "withdrawal",
         description=f"Withdrawal approved #{withdrawal.id}",
@@ -116,7 +130,7 @@ def approve_withdrawal(withdrawal, *, admin_adjustment=0, admin_note=""):
     withdrawal.status = "processed"
     withdrawal.save(update_fields=["admin_adjustment", "admin_note", "status"])
 
-    sync_user_pending_withdrawal(withdrawal.user)
+    sync_user_pending_withdrawal(user)
     return withdrawal
 
 

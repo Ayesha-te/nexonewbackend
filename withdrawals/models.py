@@ -35,6 +35,15 @@ class Withdrawal(models.Model):
     auto_generated = models.BooleanField(default=True)
     created_at = models.DateTimeField(default=timezone.now)
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user"],
+                condition=models.Q(status="pending", auto_generated=True),
+                name="unique_pending_auto_withdrawal_per_user",
+            ),
+        ]
+
 
 class AutoWithdrawalLog(models.Model):
     run_date = models.DateField(unique=True)
