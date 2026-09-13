@@ -17,6 +17,9 @@ urlpatterns = [
     path("api/withdrawals/", include("withdrawals.urls")),
     path("api/rewards/", include("rewards.urls")),
     path("api/complaints/", include("complaints.urls")),
+    path("api/notifications/", include("notifications.urls")),
+    path("api/ads/", include("ads.urls")),
+    path("api/attendance/", include("attendance.urls")),
 ]
 
 if settings.DEBUG:

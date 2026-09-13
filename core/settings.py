@@ -47,6 +47,9 @@ INSTALLED_APPS = [
     "withdrawals",
     "rewards",
     "complaints",
+    "notifications",
+    "ads",
+    "attendance",
 ]
 
 MIDDLEWARE = [

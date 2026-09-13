@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.db import transaction
 
+from ads.services import on_account_activated, on_qualifying_pair
 from network.models import BinaryNode
 from network.services import find_next_open_slot
 from pins.models import Pin
@@ -65,6 +66,7 @@ def create_user_from_pin(
         pin.save()
         BinaryNode.objects.create(user=new_user, parent=placement_parent, side=placement_side)
         cascade_team_updates(sponsor, position)
+    on_account_activated(new_user)
     return new_user
 
 
@@ -121,6 +123,7 @@ def award_binary_set_income(user, previous_pair_count=None):
         )
     user.auto_pair_income_pairs = baseline_paid_pairs + newly_completed_sets
     user.save(update_fields=["auto_pair_income_pairs"])
+    on_qualifying_pair(user)
 
 
 def collect_subtree_user_ids(root_user_id):

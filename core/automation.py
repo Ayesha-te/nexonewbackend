@@ -3,6 +3,7 @@ from threading import Lock
 
 from django.utils import timezone
 
+from ads.services import run_daily_ads_maintenance
 from rewards.services import process_monthly_salary
 from withdrawals.models import AutoWithdrawalLog
 from withdrawals.services import process_daily_auto_withdrawals
@@ -62,6 +63,7 @@ def run_automation_if_needed():
         current_date = start_date
         while current_date <= today:
             process_daily_auto_withdrawals(run_date=current_date)
+            run_daily_ads_maintenance(run_date=current_date)
             current_date += timedelta(days=1)
 
         _last_checked_date = today
