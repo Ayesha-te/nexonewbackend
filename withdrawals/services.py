@@ -1,7 +1,7 @@
 from datetime import date
 
 from django.contrib.auth import get_user_model
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from wallets.services import debit_wallet, ensure_wallet
@@ -46,18 +46,19 @@ def get_payment_label(payment_method):
     return payment_method or "Account"
 
 
-@transaction.atomic
 def sync_user_pending_withdrawal(user, run_date=None):
+    # No row locking here on purpose: this only recomputes a *preview* pending-withdrawal
+    # row from the user's current balance and never moves money (only approve_withdrawal
+    # does that, and it still holds a full user-row lock). Locking here was correct but too
+    # slow once run for every active user on every admin page load (88+ users started
+    # exceeding the platform's ~30s request timeout). The unique constraint on
+    # (user, status="pending", auto_generated=True) still makes a genuine duplicate
+    # impossible at the database level; a rare concurrent double-create just falls back to
+    # reusing whichever row won, handled below.
     run_date = run_date or date.today()
-    # Lock the user row so concurrent syncs/approvals for this same user (triggered by
-    # simultaneous admin list loads, bulk approvals, etc.) are serialized instead of racing
-    # on a "check for pending row, then create one" read-then-write, which previously could
-    # produce two duplicate pending rows for the same balance.
-    user = User.objects.select_for_update().get(pk=user.pk)
     balance, _wallet = get_withdrawable_balance(user)
     pending = (
-        Withdrawal.objects.select_for_update()
-        .filter(user=user, status="pending", auto_generated=True)
+        Withdrawal.objects.filter(user=user, status="pending", auto_generated=True)
         .order_by("-date", "-id")
         .first()
     )
@@ -85,14 +86,23 @@ def sync_user_pending_withdrawal(user, run_date=None):
             setattr(pending, field, value)
         pending.save(update_fields=list(payload.keys()))
         return pending
-    return Withdrawal.objects.create(
-        user=user,
-        status="pending",
-        auto_generated=True,
-        date=run_date,
-        created_at=timezone.now(),
-        **payload,
-    )
+
+    try:
+        with transaction.atomic():
+            return Withdrawal.objects.create(
+                user=user,
+                status="pending",
+                auto_generated=True,
+                date=run_date,
+                created_at=timezone.now(),
+                **payload,
+            )
+    except IntegrityError:
+        return (
+            Withdrawal.objects.filter(user=user, status="pending", auto_generated=True)
+            .order_by("-date", "-id")
+            .first()
+        )
 
 
 def sync_all_pending_withdrawals(run_date=None):
@@ -103,12 +113,10 @@ def sync_all_pending_withdrawals(run_date=None):
 
 @transaction.atomic
 def approve_withdrawal(withdrawal, *, admin_adjustment=0, admin_note=""):
-    # Lock the user row before the withdrawal row, in that order, matching
-    # sync_user_pending_withdrawal's lock order below. If this user somehow has more than
-    # one pending withdrawal, or a concurrent request is approving another one of theirs
-    # (or syncing their pending row) at the same time, this forces those calls to run one
-    # after another instead of racing on the same balance, and the consistent ordering
-    # avoids the two code paths deadlocking against each other.
+    # Lock the user row before the withdrawal row. If this user somehow has more than one
+    # pending withdrawal, or a concurrent request is approving another one of theirs at the
+    # same time, this forces those calls to run one after another instead of both reading
+    # the same stale balance and both debiting it.
     user = User.objects.select_for_update().get(pk=withdrawal.user_id)
     withdrawal = Withdrawal.objects.select_for_update().get(pk=withdrawal.pk)
     if withdrawal.status != "pending":
