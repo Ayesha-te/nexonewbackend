@@ -127,6 +127,11 @@ if CLOUDINARY_URL:
         "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
     }
     DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"
+    # django-cloudinary-storage's own collectstatic override checks the legacy
+    # settings.STATICFILES_STORAGE attribute directly. Django 5 no longer sets that
+    # automatically once STORAGES is defined, so without this line the attribute doesn't
+    # exist at all and the check raises AttributeError instead of just evaluating false.
+    STATICFILES_STORAGE = "django.contrib.staticfiles.storage.StaticFilesStorage"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
