@@ -2,6 +2,8 @@ from rest_framework import permissions
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from ads.services import get_users_ads_earning_totals
+
 from .models import Withdrawal
 from .serializers import WithdrawalSerializer
 from .services import approve_withdrawal, sync_all_pending_withdrawals, sync_user_pending_withdrawal
@@ -11,7 +13,8 @@ class MyWithdrawalsView(APIView):
     def get(self, request):
         sync_user_pending_withdrawal(request.user)
         rows = request.user.withdrawals.all().order_by("-date", "-id")
-        return Response(WithdrawalSerializer(rows, many=True).data)
+        ads_totals = get_users_ads_earning_totals([request.user.id])
+        return Response(WithdrawalSerializer(rows, many=True, context={"ads_totals_by_user_id": ads_totals}).data)
 
 
 class AdminWithdrawalsView(APIView):
@@ -19,8 +22,10 @@ class AdminWithdrawalsView(APIView):
 
     def get(self, request):
         sync_all_pending_withdrawals()
-        rows = Withdrawal.objects.all().order_by("-date", "-id")
-        return Response(WithdrawalSerializer(rows, many=True).data)
+        rows = list(Withdrawal.objects.all().order_by("-date", "-id"))
+        # One aggregate query for every user in the list, not one query per withdrawal row.
+        ads_totals = get_users_ads_earning_totals({row.user_id for row in rows})
+        return Response(WithdrawalSerializer(rows, many=True, context={"ads_totals_by_user_id": ads_totals}).data)
 
 
 class AdminApproveWithdrawalView(APIView):

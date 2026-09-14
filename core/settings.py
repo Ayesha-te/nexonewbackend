@@ -31,13 +31,17 @@ ALLOWED_HOSTS = ["*"]
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 USE_X_FORWARDED_HOST = True
 
+CLOUDINARY_URL = os.environ.get("CLOUDINARY_URL", "")
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
+    *(["cloudinary_storage"] if CLOUDINARY_URL else []),
     "django.contrib.staticfiles",
+    *(["cloudinary"] if CLOUDINARY_URL else []),
     "corsheaders",
     "rest_framework",
     "accounts",
@@ -112,6 +116,17 @@ STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+
+# Video ad uploads (and any other media) must survive redeploys, so use Cloudinary when
+# configured — Koyeb's container filesystem is wiped on every redeploy, so local-disk
+# storage (the default above) silently loses uploaded files otherwise. Falls back to local
+# storage automatically when CLOUDINARY_URL isn't set (e.g. local development).
+if CLOUDINARY_URL:
+    STORAGES = {
+        "default": {"BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage"},
+        "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+    }
+    DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

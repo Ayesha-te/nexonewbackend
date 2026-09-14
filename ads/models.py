@@ -49,9 +49,27 @@ class AdsCycle(models.Model):
         ]
 
 
+class AdVideo(models.Model):
+    title = models.CharField(max_length=128, blank=True, default="")
+    video = models.FileField(upload_to="ads-videos/")
+    duration_seconds = models.PositiveIntegerField()
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
 class AdWatch(models.Model):
+    STATUS_CHOICES = (
+        ("started", "Started"),
+        ("completed", "Completed"),
+    )
+
     user = models.ForeignKey(User, related_name="ad_watches", on_delete=models.CASCADE)
     cycle = models.ForeignKey(AdsCycle, related_name="watches", null=True, blank=True, on_delete=models.SET_NULL)
+    video = models.ForeignKey(AdVideo, related_name="watches", null=True, blank=True, on_delete=models.SET_NULL)
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="completed")
     watched_date = models.DateField()
-    reward_pkr = models.PositiveIntegerField()
+    started_at = models.DateTimeField(default=timezone.now)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    reward_pkr = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(default=timezone.now)

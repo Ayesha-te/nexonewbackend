@@ -13,8 +13,11 @@ class WithdrawalSerializer(serializers.ModelSerializer):
     netAmount = serializers.IntegerField(source="net_amount")
     leftTeamTotal = serializers.IntegerField(source="left_team_total")
     rightTeamTotal = serializers.IntegerField(source="right_team_total")
+    totalTeam = serializers.SerializerMethodField()
+    unmatchedTeam = serializers.SerializerMethodField()
     matchedPairs = serializers.IntegerField(source="matched_pairs")
     systemAddedEarnings = serializers.IntegerField(source="system_added_earnings")
+    adsEarningTotal = serializers.SerializerMethodField()
     requestedAmount = serializers.IntegerField(source="amount")
     adminAdjustment = serializers.IntegerField(source="admin_adjustment")
     adminNote = serializers.CharField(source="admin_note")
@@ -36,8 +39,11 @@ class WithdrawalSerializer(serializers.ModelSerializer):
             "netAmount",
             "leftTeamTotal",
             "rightTeamTotal",
+            "totalTeam",
+            "unmatchedTeam",
             "matchedPairs",
             "systemAddedEarnings",
+            "adsEarningTotal",
             "adminAdjustment",
             "adminNote",
             "finalAmount",
@@ -47,6 +53,17 @@ class WithdrawalSerializer(serializers.ModelSerializer):
 
     def get_userName(self, obj):
         return obj.user.full_name
+
+    def get_totalTeam(self, obj):
+        return obj.left_team_total + obj.right_team_total
+
+    def get_unmatchedTeam(self, obj):
+        return abs(obj.left_team_total - obj.right_team_total)
+
+    def get_adsEarningTotal(self, obj):
+        # Batch-computed by the view (one aggregate query for the whole list) and passed
+        # in via context, so rendering N withdrawals never issues N extra queries.
+        return self.context.get("ads_totals_by_user_id", {}).get(obj.user_id, 0)
 
     def get_finalAmount(self, obj):
         return max(obj.amount + obj.admin_adjustment, 0)
