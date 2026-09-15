@@ -5,6 +5,19 @@ from django.utils import timezone
 User = settings.AUTH_USER_MODEL
 
 
+def get_ad_video_storage():
+    # Callable (not an instance) so Django migrations serialize this as a stable dotted
+    # path instead of baking in a storage instance. Falls back to Django's default
+    # (local disk) storage when Cloudinary isn't configured, e.g. local development.
+    if getattr(settings, "CLOUDINARY_URL", ""):
+        from .storage import VideoCloudinaryStorage
+
+        return VideoCloudinaryStorage()
+    from django.core.files.storage import default_storage
+
+    return default_storage
+
+
 class AdsSettings(models.Model):
     enabled = models.BooleanField(default=True)
     daily_limit = models.PositiveIntegerField(default=3)
@@ -51,7 +64,7 @@ class AdsCycle(models.Model):
 
 class AdVideo(models.Model):
     title = models.CharField(max_length=128, blank=True, default="")
-    video = models.FileField(upload_to="ads-videos/")
+    video = models.FileField(upload_to="ads-videos/", storage=get_ad_video_storage)
     duration_seconds = models.PositiveIntegerField()
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(default=timezone.now)
