@@ -6,7 +6,7 @@ from ads.services import get_users_ads_earning_totals
 
 from .models import Withdrawal
 from .serializers import WithdrawalSerializer
-from .services import approve_withdrawal, sync_all_pending_withdrawals, sync_user_pending_withdrawal
+from .services import approve_withdrawal, sync_user_pending_withdrawal
 
 
 class MyWithdrawalsView(APIView):
@@ -21,7 +21,12 @@ class AdminWithdrawalsView(APIView):
     permission_classes = [permissions.IsAdminUser]
 
     def get(self, request):
-        sync_all_pending_withdrawals()
+        # Recomputing every active user's pending withdrawal on every single page load
+        # made this endpoint take 30+ seconds and occasionally time out client-side
+        # (looking like a failed approval even when the approve itself had already
+        # succeeded). Pending rows are kept fresh by the once-daily automation job
+        # (core/automation.py) plus the single-user sync that already runs right after
+        # each individual approval below - no per-request loop over every user needed here.
         rows = list(Withdrawal.objects.all().order_by("-date", "-id"))
         # One aggregate query for every user in the list, not one query per withdrawal row.
         ads_totals = get_users_ads_earning_totals({row.user_id for row in rows})
