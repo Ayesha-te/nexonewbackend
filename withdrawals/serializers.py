@@ -22,6 +22,8 @@ class WithdrawalSerializer(serializers.ModelSerializer):
     adminAdjustment = serializers.IntegerField(source="admin_adjustment")
     adminNote = serializers.CharField(source="admin_note")
     finalAmount = serializers.SerializerMethodField()
+    createdAt = serializers.DateTimeField(source="created_at")
+    processedAt = serializers.DateTimeField(source="processed_at")
 
     class Meta:
         model = Withdrawal
@@ -49,6 +51,8 @@ class WithdrawalSerializer(serializers.ModelSerializer):
             "finalAmount",
             "date",
             "status",
+            "createdAt",
+            "processedAt",
         ]
 
     def get_userName(self, obj):

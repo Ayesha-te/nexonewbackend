@@ -136,7 +136,8 @@ def approve_withdrawal(withdrawal, *, admin_adjustment=0, admin_note=""):
     withdrawal.admin_adjustment = admin_adjustment
     withdrawal.admin_note = admin_note
     withdrawal.status = "processed"
-    withdrawal.save(update_fields=["admin_adjustment", "admin_note", "status"])
+    withdrawal.processed_at = timezone.now()
+    withdrawal.save(update_fields=["admin_adjustment", "admin_note", "status", "processed_at"])
 
     sync_user_pending_withdrawal(user)
     return withdrawal

@@ -15,13 +15,24 @@ def credit_wallet(user, amount, entry_type, description="", taxable_type="normal
     user.current_income += amount
     wallet.save()
     user.save()
-    return LedgerEntry.objects.create(
+    entry = LedgerEntry.objects.create(
         wallet=wallet,
         amount=amount,
         entry_type=entry_type,
         description=description,
         taxable_type=taxable_type,
     )
+    # Keep this user's pending-withdrawal preview in sync the moment they earn anything,
+    # instead of waiting for the once-daily batch job. Single-user, no loop over other
+    # users - deferred import avoids a circular import (withdrawals already imports from
+    # this module).
+    try:
+        from withdrawals.services import sync_user_pending_withdrawal
+
+        sync_user_pending_withdrawal(user)
+    except Exception:
+        pass
+    return entry
 
 
 def debit_wallet(user, amount, entry_type, description="", taxable_type="normal"):

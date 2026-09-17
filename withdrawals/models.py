@@ -34,6 +34,7 @@ class Withdrawal(models.Model):
     )
     auto_generated = models.BooleanField(default=True)
     created_at = models.DateTimeField(default=timezone.now)
+    processed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         constraints = [
