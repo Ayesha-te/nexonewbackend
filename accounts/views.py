@@ -17,6 +17,7 @@ from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from ads.services import get_total_ads_payout
 from core.automation import get_automation_status
 from network.services import build_tree_payload
 from pins.models import PinRequest
@@ -310,6 +311,7 @@ class AdminDashboardView(APIView):
         total_rewards_paid = UserReward.objects.aggregate(
             total=Coalesce(Sum("tier__amount"), Value(0), output_field=IntegerField())
         )["total"]
+        total_ads_payout = get_total_ads_payout()
         net_system_profit = total_deposit - total_withdrawal - total_rewards_paid
         today_joinings = SignupLead.objects.filter(created_at__date=today).count()
         today_activations = PinActivationRequest.objects.filter(
@@ -326,6 +328,7 @@ class AdminDashboardView(APIView):
                 "totalDeposit": total_deposit,
                 "totalWithdrawal": total_withdrawal,
                 "totalRewardsPaid": total_rewards_paid,
+                "totalAdsPayout": total_ads_payout,
                 "netSystemProfit": net_system_profit,
                 "todayJoinings": today_joinings,
                 "todayActivations": today_activations,

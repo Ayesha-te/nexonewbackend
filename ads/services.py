@@ -262,6 +262,12 @@ def get_users_ads_earning_totals(user_ids):
     return {row["user_id"]: row["total"] or 0 for row in rows}
 
 
+def get_total_ads_payout():
+    """All-time total of every completed Ads reward, system-wide - a single aggregate query
+    for the admin dashboard's Financial Reports card."""
+    return AdWatch.objects.filter(status="completed").aggregate(total=Sum("reward_pkr"))["total"] or 0
+
+
 def get_daily_ads_payout(day=None):
     day = day or timezone.localdate()
     agg = AdWatch.objects.filter(status="completed", watched_date=day).aggregate(
