@@ -6,7 +6,7 @@ from ads.services import get_users_ads_earning_totals
 
 from .models import Withdrawal
 from .serializers import WithdrawalSerializer
-from .services import approve_withdrawal, sync_user_pending_withdrawal
+from .services import approve_withdrawal, sync_all_pending_withdrawals, sync_user_pending_withdrawal
 
 
 class MyWithdrawalsView(APIView):
@@ -31,6 +31,18 @@ class AdminWithdrawalsView(APIView):
         # One aggregate query for every user in the list, not one query per withdrawal row.
         ads_totals = get_users_ads_earning_totals({row.user_id for row in rows})
         return Response(WithdrawalSerializer(rows, many=True, context={"ads_totals_by_user_id": ads_totals}).data)
+
+
+class AdminResyncWithdrawalsView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def post(self, request):
+        # Manual, admin-triggered only (never automatic on page load - that's what made
+        # the list slow before). Covers any account whose pending withdrawal went stale
+        # for a reason the real-time credit_wallet() sync wouldn't catch, e.g. balances
+        # that existed before that sync was added, or a manual data correction.
+        sync_all_pending_withdrawals()
+        return Response({"detail": "Pending withdrawals resynced."})
 
 
 class AdminApproveWithdrawalView(APIView):
