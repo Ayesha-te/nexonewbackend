@@ -6,6 +6,7 @@ from .models import Withdrawal
 class WithdrawalSerializer(serializers.ModelSerializer):
     userId = serializers.IntegerField(source="user.id", read_only=True)
     userName = serializers.SerializerMethodField()
+    userEmail = serializers.EmailField(source="user.email", read_only=True)
     paymentMethod = serializers.CharField(source="payment_method")
     bankName = serializers.CharField(source="bank_name")
     accountNumber = serializers.CharField(source="account_number")
@@ -31,6 +32,7 @@ class WithdrawalSerializer(serializers.ModelSerializer):
             "id",
             "userId",
             "userName",
+            "userEmail",
             "paymentMethod",
             "bankName",
             "accountNumber",
