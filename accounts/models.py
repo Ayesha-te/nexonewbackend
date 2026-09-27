@@ -102,6 +102,7 @@ class SignupLead(models.Model):
 
 class SiteSetting(models.Model):
     usd_rate_pkr = models.DecimalField(max_digits=10, decimal_places=2, default=280)
+    whatsapp_number = models.CharField(max_length=20, default="923448252109", blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     @classmethod

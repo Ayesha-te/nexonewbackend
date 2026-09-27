@@ -386,11 +386,16 @@ class AdminSystemStatusView(APIView):
 
 
 class SiteSettingsView(APIView):
+    # Public on purpose: the login page (before any auth token exists) needs the WhatsApp
+    # contact number, and the USD display rate is not sensitive.
+    permission_classes = [permissions.AllowAny]
+
     def get(self, request):
         settings = SiteSetting.current()
         return Response(
             {
                 "usdRatePkr": float(settings.usd_rate_pkr),
+                "whatsappNumber": settings.whatsapp_number,
                 "updatedAt": settings.updated_at,
             }
         )
@@ -404,25 +409,38 @@ class AdminSiteSettingsView(APIView):
         return Response(
             {
                 "usdRatePkr": float(settings.usd_rate_pkr),
+                "whatsappNumber": settings.whatsapp_number,
                 "updatedAt": settings.updated_at,
             }
         )
 
     def post(self, request):
-        try:
-            usd_rate_pkr = float(request.data.get("usdRatePkr", 0))
-        except (TypeError, ValueError):
-            return Response({"detail": "USD rate must be a valid number."}, status=400)
-
-        if usd_rate_pkr <= 0:
-            return Response({"detail": "USD rate must be greater than 0."}, status=400)
-
         settings = SiteSetting.current()
-        settings.usd_rate_pkr = usd_rate_pkr
-        settings.save(update_fields=["usd_rate_pkr", "updated_at"])
+        update_fields = ["updated_at"]
+
+        if "usdRatePkr" in request.data:
+            try:
+                usd_rate_pkr = float(request.data.get("usdRatePkr", 0))
+            except (TypeError, ValueError):
+                return Response({"detail": "USD rate must be a valid number."}, status=400)
+            if usd_rate_pkr <= 0:
+                return Response({"detail": "USD rate must be greater than 0."}, status=400)
+            settings.usd_rate_pkr = usd_rate_pkr
+            update_fields.append("usd_rate_pkr")
+
+        if "whatsappNumber" in request.data:
+            raw_number = str(request.data.get("whatsappNumber", "")).strip()
+            digits_only = "".join(ch for ch in raw_number if ch.isdigit())
+            if not digits_only:
+                return Response({"detail": "WhatsApp number must contain at least one digit."}, status=400)
+            settings.whatsapp_number = digits_only
+            update_fields.append("whatsapp_number")
+
+        settings.save(update_fields=update_fields)
         return Response(
             {
                 "usdRatePkr": float(settings.usd_rate_pkr),
+                "whatsappNumber": settings.whatsapp_number,
                 "updatedAt": settings.updated_at,
             }
         )
