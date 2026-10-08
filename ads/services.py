@@ -100,7 +100,15 @@ def on_account_activated(user):
                 )
         except IntegrityError:
             return
-        notify(user, "welcome", start_date=str(start), end_date=str(end))
+        notify(
+            user,
+            "welcome",
+            start_date=str(start),
+            end_date=str(end),
+            welcome_duration_days=settings.welcome_duration_days,
+            daily_limit=settings.daily_limit,
+            ad_word="Ad" if settings.daily_limit == 1 else "Ads",
+        )
     except Exception:
         return
 

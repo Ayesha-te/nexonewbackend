@@ -5,8 +5,8 @@ DEFAULT_TYPES = [
         "notif_type": "welcome",
         "title_template": "🎉 Welcome to NexoCart",
         "message_template": (
-            "Your account has been successfully activated. Your 3-Day Welcome Ads "
-            "Bonus is now available. You can watch up to 3 Ads per day."
+            "Your account has been successfully activated. Your {welcome_duration_days}-Day "
+            "Welcome Ads Bonus is now available. You can watch up to {daily_limit} {ad_word} per day."
         ),
     },
     {
