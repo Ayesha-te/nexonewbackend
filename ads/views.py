@@ -24,8 +24,9 @@ class MyAdsStatusView(APIView):
 
 class MyAdsWatchStartView(APIView):
     def post(self, request):
+        cycle_type = request.data.get("cycleType")
         try:
-            watch, video, settings = start_watch_ad(request.user)
+            watch, video, settings = start_watch_ad(request.user, cycle_type)
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=400)
         return Response(

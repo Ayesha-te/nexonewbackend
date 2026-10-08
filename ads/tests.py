@@ -10,6 +10,7 @@ from wallets.services import ensure_wallet
 from .models import AdsCycle, AdsSettings, AdVideo, AdWatch
 from .services import (
     complete_watch_ad,
+    get_ads_status,
     on_account_activated,
     on_qualifying_pair,
     start_watch_ad,
@@ -40,8 +41,8 @@ class AdsServiceTests(TestCase):
             is_active=True,
         )
 
-    def _full_watch(self):
-        watch, video, _settings = start_watch_ad(self.user)
+    def _full_watch(self, cycle_type="pair"):
+        watch, video, _settings = start_watch_ad(self.user, cycle_type)
         watch.started_at = timezone.now() - timedelta(seconds=video.duration_seconds + 1)
         watch.save(update_fields=["started_at"])
         return complete_watch_ad(self.user, watch.id)
@@ -59,7 +60,7 @@ class AdsServiceTests(TestCase):
             self._full_watch()
 
         with self.assertRaises(ValueError):
-            start_watch_ad(self.user)
+            start_watch_ad(self.user, "pair")
 
         self.assertEqual(AdWatch.objects.filter(user=self.user, status="completed").count(), 3)
         cycle.refresh_from_db()
@@ -72,24 +73,56 @@ class AdsServiceTests(TestCase):
             end_date=timezone.localdate(),
             status="active",
         )
-        watch, _video, _settings = start_watch_ad(self.user)
+        watch, _video, _settings = start_watch_ad(self.user, "pair")
         with self.assertRaises(ValueError):
             complete_watch_ad(self.user, watch.id)
 
-    def test_on_qualifying_pair_twice_leaves_one_active_cycle(self):
+    def test_on_qualifying_pair_twice_leaves_one_active_pair_cycle(self):
         on_qualifying_pair(self.user)
         on_qualifying_pair(self.user)
 
-        active_cycles = AdsCycle.objects.filter(user=self.user, status="active")
-        self.assertEqual(active_cycles.count(), 1)
+        active_pair_cycles = AdsCycle.objects.filter(user=self.user, cycle_type="pair", status="active")
+        self.assertEqual(active_pair_cycles.count(), 1)
         self.assertEqual(
-            AdsCycle.objects.filter(user=self.user, status="expired").count(), 1
+            AdsCycle.objects.filter(user=self.user, cycle_type="pair", status="expired").count(), 1
         )
-        self.assertEqual(active_cycles.first().cycle_type, "pair")
+
+    def test_qualifying_pair_never_expires_an_active_welcome_cycle(self):
+        on_account_activated(self.user)
+        welcome_cycle = AdsCycle.objects.get(user=self.user, cycle_type="welcome")
+
+        on_qualifying_pair(self.user)
+
+        welcome_cycle.refresh_from_db()
+        self.assertEqual(welcome_cycle.status, "active")
+        pair_cycle = AdsCycle.objects.get(user=self.user, cycle_type="pair")
+        self.assertEqual(pair_cycle.status, "active")
+
+        status = get_ads_status(self.user)
+        ads_by_type = {ad["cycleType"]: ad for ad in status["ads"]}
+        self.assertTrue(ads_by_type["welcome"]["active"])
+        self.assertTrue(ads_by_type["pair"]["active"])
+
+    def test_watching_pair_ad_does_not_consume_welcome_ad_eligibility(self):
+        on_account_activated(self.user)
+        on_qualifying_pair(self.user)
+
+        self._full_watch(cycle_type="pair")
+
+        # Watching the Pair ad only uses up a slot in the shared daily count, not the
+        # Welcome cycle's own availability - it should still show as active/watchable.
+        status = get_ads_status(self.user)
+        ads_by_type = {ad["cycleType"]: ad for ad in status["ads"]}
+        self.assertTrue(ads_by_type["welcome"]["active"])
+        self.assertTrue(ads_by_type["welcome"]["canWatch"])
 
     def test_watch_ad_without_active_cycle_raises(self):
         with self.assertRaises(ValueError):
-            start_watch_ad(self.user)
+            start_watch_ad(self.user, "pair")
+
+    def test_invalid_cycle_type_raises(self):
+        with self.assertRaises(ValueError):
+            start_watch_ad(self.user, "not-a-real-type")
 
     def test_on_account_activated_is_idempotent_and_creates_one_welcome_cycle(self):
         on_account_activated(self.user)

@@ -24,13 +24,22 @@ def get_or_create_settings():
     return AdsSettings.current()
 
 
-def get_active_cycle(user):
+def get_active_cycle(user, cycle_type=None):
     today = timezone.localdate()
-    return (
-        AdsCycle.objects.filter(user=user, status="active", end_date__gte=today)
-        .order_by("-id")
-        .first()
-    )
+    qs = AdsCycle.objects.filter(user=user, status="active", end_date__gte=today)
+    if cycle_type:
+        qs = qs.filter(cycle_type=cycle_type)
+    return qs.order_by("-id").first()
+
+
+def get_active_cycles(user):
+    """Both ad types are independent and can be active at once, so this returns a dict of
+    the two separately rather than a single "the" active cycle."""
+    today = timezone.localdate()
+    cycles = {"welcome": None, "pair": None}
+    for cycle in AdsCycle.objects.filter(user=user, status="active", end_date__gte=today):
+        cycles[cycle.cycle_type] = cycle
+    return cycles
 
 
 def get_today_watch_count(user, today=None):
@@ -39,29 +48,37 @@ def get_today_watch_count(user, today=None):
 
 
 def get_ads_status(user):
+    """Welcome Ads and Pair Complete Ads are independent and can both be active for the
+    same user at once, so status is a list of up to two separately-watchable ad slots
+    sharing one daily watch count/limit (the existing Welcome Ads daily limit, unchanged)."""
     settings = get_or_create_settings()
-    cycle = get_active_cycle(user)
+    cycles = get_active_cycles(user)
     today = timezone.localdate()
     watched_today = get_today_watch_count(user, today=today)
-    cycle_type = cycle.cycle_type if cycle else None
-    if cycle_type == "welcome":
-        reward_per_ad = settings.welcome_reward_pkr
-    elif cycle_type == "pair":
-        reward_per_ad = settings.pair_reward_pkr
-    else:
-        reward_per_ad = 0
     remaining_today = max(settings.daily_limit - watched_today, 0)
-    can_watch = bool(settings.enabled and cycle is not None and watched_today < settings.daily_limit)
+    can_watch_any = bool(settings.enabled and watched_today < settings.daily_limit)
+
+    reward_by_type = {"welcome": settings.welcome_reward_pkr, "pair": settings.pair_reward_pkr}
+    ads = []
+    for cycle_type in ("welcome", "pair"):
+        cycle = cycles[cycle_type]
+        ads.append(
+            {
+                "cycleType": cycle_type,
+                "active": cycle is not None,
+                "startDate": cycle.start_date if cycle else None,
+                "endDate": cycle.end_date if cycle else None,
+                "rewardPerAd": reward_by_type[cycle_type],
+                "canWatch": bool(can_watch_any and cycle is not None),
+            }
+        )
+
     return {
         "enabled": settings.enabled,
-        "cycleType": cycle_type,
-        "startDate": cycle.start_date if cycle else None,
-        "endDate": cycle.end_date if cycle else None,
         "dailyLimit": settings.daily_limit,
         "watchedToday": watched_today,
         "remainingToday": remaining_today,
-        "rewardPerAd": reward_per_ad,
-        "canWatch": can_watch,
+        "ads": ads,
     }
 
 
@@ -97,8 +114,12 @@ def _on_qualifying_pair(user):
 
     notify(locked_user, "pair_completed")
 
+    # Only ever touches a previous PAIR cycle - an active Welcome Ad cycle for this user
+    # must never be expired, cancelled, or otherwise affected by a pair completing. The two
+    # ad types are fully independent (see models.AdsCycle's per-(user, cycle_type) unique
+    # constraint, which is what makes both able to be active at once).
     existing_cycle = (
-        AdsCycle.objects.select_for_update().filter(user=locked_user, status="active").first()
+        AdsCycle.objects.select_for_update().filter(user=locked_user, cycle_type="pair", status="active").first()
     )
     is_renewal = existing_cycle is not None
 
@@ -127,7 +148,10 @@ def on_qualifying_pair(user):
         return
 
 
-def _get_eligible_cycle_or_raise(user):
+def _get_eligible_cycle_or_raise(user, cycle_type):
+    if cycle_type not in ("welcome", "pair"):
+        raise ValueError("Invalid ad type.")
+
     settings = get_or_create_settings()
     if not settings.enabled:
         raise ValueError("Ads are currently disabled.")
@@ -135,12 +159,13 @@ def _get_eligible_cycle_or_raise(user):
     today = timezone.localdate()
     cycle = (
         AdsCycle.objects.select_for_update()
-        .filter(user=user, status="active", end_date__gte=today)
+        .filter(user=user, cycle_type=cycle_type, status="active", end_date__gte=today)
         .order_by("-id")
         .first()
     )
     if cycle is None:
-        raise ValueError("No active Ads cycle. Complete a qualifying Binary Pair or wait for your Welcome Ads window.")
+        label = "Welcome Ads" if cycle_type == "welcome" else "Pair Complete Ads"
+        raise ValueError(f"No active {label} cycle right now.")
 
     today_count = AdWatch.objects.filter(user=user, watched_date=today, status="completed").count()
     if today_count >= settings.daily_limit:
@@ -150,9 +175,9 @@ def _get_eligible_cycle_or_raise(user):
 
 
 @transaction.atomic
-def start_watch_ad(user):
+def start_watch_ad(user, cycle_type):
     locked_user = User.objects.select_for_update().get(pk=user.pk)
-    settings, cycle, today, _today_count = _get_eligible_cycle_or_raise(locked_user)
+    settings, cycle, today, _today_count = _get_eligible_cycle_or_raise(locked_user, cycle_type)
 
     video = AdVideo.objects.filter(is_active=True).order_by("?").first()
     if video is None:

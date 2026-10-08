@@ -54,10 +54,13 @@ class AdsCycle(models.Model):
 
     class Meta:
         constraints = [
+            # One active cycle per TYPE per user, not one active cycle total - this is what
+            # lets a Welcome Ad cycle and a Pair Complete Ad cycle both be active for the
+            # same user at the same time, as separate, independent ads.
             models.UniqueConstraint(
-                fields=["user"],
+                fields=["user", "cycle_type"],
                 condition=models.Q(status="active"),
-                name="unique_active_ads_cycle_per_user",
+                name="unique_active_ads_cycle_per_user_type",
             ),
         ]
 
