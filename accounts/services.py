@@ -109,10 +109,14 @@ def award_binary_set_income(user, previous_pair_count=None):
     for offset in range(newly_completed_sets):
         set_number = starting_set_number + offset + 1
         if set_number == 1:
-            amount = 400
-        elif set_number <= 99:
             amount = 200
+        elif set_number <= 99:
+            amount = 100
         else:
+            # Full rate is still displayed/added here. The 50% reduction for the 100th
+            # pair onward is applied manually by Admin at withdrawal time via the existing
+            # admin_adjustment field - it must never be baked into the earned/displayed
+            # amount itself (see withdrawals.services.calculate_withdrawal_amounts).
             amount = 100
         credit_wallet(
             user,

@@ -21,10 +21,10 @@ def get_withdrawable_balance(user):
 
 
 def calculate_withdrawal_amounts(balance):
-    amount = min(balance, 4000)
+    amount = min(balance, 2000)
     tax_type = "normal"
     tax_rate = 0.05
-    if amount >= 4000:
+    if amount >= 2000:
         tax_type = "cap"
         tax_rate = 0.10
     tax = int(round(amount * tax_rate))
