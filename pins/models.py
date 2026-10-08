@@ -5,7 +5,7 @@ from django.utils.crypto import get_random_string
 
 User = settings.AUTH_USER_MODEL
 
-PIN_PRICE = 1000
+PIN_PRICE = 600
 MIN_PIN_PURCHASE_QUANTITY = 1
 MAX_PIN_PURCHASE_QUANTITY = 1000
 PIN_PURCHASE_DISABLED_MESSAGE = "PIN/Token Purchase is temporarily unavailable. Please try again later."
@@ -62,7 +62,7 @@ class Pin(models.Model):
         on_delete=models.SET_NULL,
     )
     code = models.CharField(max_length=32, unique=True, blank=True)
-    amount = models.PositiveIntegerField(default=1000)
+    amount = models.PositiveIntegerField(default=600)
     status = models.CharField(max_length=16, choices=(("unused", "Unused"), ("used", "Used")), default="unused")
     used_by = models.ForeignKey(User, related_name="consumed_pins", null=True, blank=True, on_delete=models.SET_NULL)
     created_at = models.DateTimeField(default=timezone.now)
