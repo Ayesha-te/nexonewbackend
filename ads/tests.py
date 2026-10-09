@@ -116,6 +116,30 @@ class AdsServiceTests(TestCase):
         self.assertTrue(ads_by_type["welcome"]["active"])
         self.assertTrue(ads_by_type["welcome"]["canWatch"])
 
+    def test_daily_limit_applies_per_cycle_type_not_shared(self):
+        # Reproduces the reported bug: with daily_limit=1, watching today's Welcome ad used
+        # to also block today's Pair ad because both counted against one shared total. Each
+        # active cycle type must get its own independent daily allowance.
+        settings = AdsSettings.current()
+        settings.daily_limit = 1
+        settings.save(update_fields=["daily_limit"])
+
+        on_account_activated(self.user)
+        on_qualifying_pair(self.user)
+
+        self._full_watch(cycle_type="welcome")
+
+        status = get_ads_status(self.user)
+        ads_by_type = {ad["cycleType"]: ad for ad in status["ads"]}
+        self.assertFalse(ads_by_type["welcome"]["canWatch"])
+        self.assertTrue(ads_by_type["pair"]["canWatch"])
+
+        # And the pair ad must actually be watchable end-to-end, not just reported as such.
+        self._full_watch(cycle_type="pair")
+        self.assertEqual(
+            AdWatch.objects.filter(user=self.user, status="completed").count(), 2
+        )
+
     def test_watch_ad_without_active_cycle_raises(self):
         with self.assertRaises(ValueError):
             start_watch_ad(self.user, "pair")

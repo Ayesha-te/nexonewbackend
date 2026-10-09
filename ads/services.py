@@ -42,26 +42,35 @@ def get_active_cycles(user):
     return cycles
 
 
-def get_today_watch_count(user, today=None):
+def get_today_watch_count(user, today=None, cycle_type=None):
     today = today or timezone.localdate()
-    return AdWatch.objects.filter(user=user, watched_date=today, status="completed").count()
+    qs = AdWatch.objects.filter(user=user, watched_date=today, status="completed")
+    if cycle_type:
+        qs = qs.filter(cycle__cycle_type=cycle_type)
+    return qs.count()
 
 
 def get_ads_status(user):
     """Welcome Ads and Pair Complete Ads are independent and can both be active for the
-    same user at once, so status is a list of up to two separately-watchable ad slots
-    sharing one daily watch count/limit (the existing Welcome Ads daily limit, unchanged)."""
+    same user at once, and each has its OWN daily watch count against the shared daily
+    limit setting - watching today's Welcome ad does not use up today's Pair ad, and vice
+    versa. A user with both cycles active can watch up to `daily_limit` ads per cycle type
+    per day."""
     settings = get_or_create_settings()
     cycles = get_active_cycles(user)
     today = timezone.localdate()
-    watched_today = get_today_watch_count(user, today=today)
-    remaining_today = max(settings.daily_limit - watched_today, 0)
-    can_watch_any = bool(settings.enabled and watched_today < settings.daily_limit)
 
     reward_by_type = {"welcome": settings.welcome_reward_pkr, "pair": settings.pair_reward_pkr}
     ads = []
+    total_watched_today = 0
+    total_remaining_today = 0
     for cycle_type in ("welcome", "pair"):
         cycle = cycles[cycle_type]
+        watched_today = get_today_watch_count(user, today=today, cycle_type=cycle_type)
+        remaining_today = max(settings.daily_limit - watched_today, 0)
+        total_watched_today += watched_today
+        if cycle is not None:
+            total_remaining_today += remaining_today
         ads.append(
             {
                 "cycleType": cycle_type,
@@ -69,15 +78,17 @@ def get_ads_status(user):
                 "startDate": cycle.start_date if cycle else None,
                 "endDate": cycle.end_date if cycle else None,
                 "rewardPerAd": reward_by_type[cycle_type],
-                "canWatch": bool(can_watch_any and cycle is not None),
+                "canWatch": bool(settings.enabled and cycle is not None and watched_today < settings.daily_limit),
+                "watchedToday": watched_today,
+                "remainingToday": remaining_today,
             }
         )
 
     return {
         "enabled": settings.enabled,
         "dailyLimit": settings.daily_limit,
-        "watchedToday": watched_today,
-        "remainingToday": remaining_today,
+        "watchedToday": total_watched_today,
+        "remainingToday": total_remaining_today,
         "ads": ads,
     }
 
@@ -175,9 +186,10 @@ def _get_eligible_cycle_or_raise(user, cycle_type):
         label = "Welcome Ads" if cycle_type == "welcome" else "Pair Complete Ads"
         raise ValueError(f"No active {label} cycle right now.")
 
-    today_count = AdWatch.objects.filter(user=user, watched_date=today, status="completed").count()
+    today_count = get_today_watch_count(user, today=today, cycle_type=cycle_type)
     if today_count >= settings.daily_limit:
-        raise ValueError("Daily Ads limit reached. Come back tomorrow.")
+        label = "Welcome Ads" if cycle_type == "welcome" else "Pair Complete Ads"
+        raise ValueError(f"Daily {label} limit reached. Come back tomorrow.")
 
     return settings, cycle, today, today_count
 
@@ -233,12 +245,15 @@ def complete_watch_ad(user, watch_id):
         raise ValueError("Your Ads cycle is no longer active.")
 
     today_count = (
-        AdWatch.objects.filter(user=locked_user, watched_date=today, status="completed")
+        AdWatch.objects.filter(
+            user=locked_user, watched_date=today, status="completed", cycle__cycle_type=cycle.cycle_type
+        )
         .exclude(pk=watch.pk)
         .count()
     )
     if today_count >= settings.daily_limit:
-        raise ValueError("Daily Ads limit reached. Come back tomorrow.")
+        label = "Welcome Ads" if cycle.cycle_type == "welcome" else "Pair Complete Ads"
+        raise ValueError(f"Daily {label} limit reached. Come back tomorrow.")
 
     reward = settings.welcome_reward_pkr if cycle.cycle_type == "welcome" else settings.pair_reward_pkr
 
@@ -255,7 +270,16 @@ def complete_watch_ad(user, watch_id):
         taxable_type="normal",
     )
 
-    if today_count + 1 == settings.daily_limit:
+    # "Daily Ads Completed" fires once the user has no more ads left today across any of
+    # their currently active cycles (not just the one they just watched) - each cycle type
+    # has its own independent daily limit, so this only notifies once everything is done.
+    active_cycles = get_active_cycles(locked_user)
+    all_done_today = all(
+        get_today_watch_count(locked_user, today=today, cycle_type=ct) >= settings.daily_limit
+        for ct, c in active_cycles.items()
+        if c is not None
+    )
+    if all_done_today:
         notify(locked_user, "daily_ads_completed")
 
     return watch
