@@ -17,6 +17,13 @@ class UserReward(models.Model):
     user = models.ForeignKey(User, related_name="rewards", on_delete=models.CASCADE)
     tier = models.ForeignKey(RewardTier, on_delete=models.CASCADE)
     rewarded_at = models.DateTimeField(default=timezone.now)
+    # Frozen at the moment this reward was credited, so a later admin change to
+    # RewardTier.amount never retroactively changes what this historical record shows -
+    # it always reflects what the user was actually paid.
+    amount = models.PositiveIntegerField(default=0)
+    ledger_entry = models.ForeignKey(
+        "wallets.LedgerEntry", null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
 
     class Meta:
         unique_together = ("user", "tier")

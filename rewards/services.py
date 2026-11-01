@@ -47,14 +47,22 @@ def award_matching_rewards(user):
     for tier in RewardTier.objects.all().order_by("sequence"):
         if user.left_team_count >= tier.left_target and user.right_team_count >= tier.right_target:
             reward_obj, created = UserReward.objects.get_or_create(user=user, tier=tier)
-            if created and tier.amount > 0:
-                credit_wallet(
+            if not created:
+                continue
+            # Freeze the amount (and the ledger entry it was paid through) at the moment of
+            # crediting, so this record's displayed amount never silently changes later if
+            # an admin edits RewardTier.amount for future users.
+            reward_obj.amount = tier.amount
+            if tier.amount > 0:
+                entry = credit_wallet(
                     user,
                     tier.amount,
                     "reward_income",
                     description=f"Reward unlocked: {tier.reward}",
                     taxable_type="reward",
                 )
+                reward_obj.ledger_entry = entry
+            reward_obj.save(update_fields=["amount", "ledger_entry"])
 
 
 def process_monthly_salary(run_date=None):

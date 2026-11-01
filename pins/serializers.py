@@ -3,7 +3,6 @@ from rest_framework import serializers
 from .models import (
     MAX_PIN_PURCHASE_QUANTITY,
     MIN_PIN_PURCHASE_QUANTITY,
-    PIN_PRICE,
     SUPPORTED_PIN_PAYMENT_METHODS,
     Pin,
     PinPurchaseSettings,
@@ -94,7 +93,9 @@ class PinRequestCreateSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         attrs.pop("amount", None)
-        attrs["amount"] = attrs["quantity"] * PIN_PRICE
+        # Always derived server-side from the live, authoritative price setting (including
+        # any active promo) at the moment of submission - never trust a client-sent amount.
+        attrs["amount"] = attrs["quantity"] * PinPurchaseSettings.current().current_price()
         return attrs
 
 
@@ -103,6 +104,12 @@ class PinPurchaseSettingsSerializer(serializers.ModelSerializer):
     availableAgainTime = serializers.CharField(source="available_again_time")
     disabledMessage = serializers.SerializerMethodField()
     pinPrice = serializers.SerializerMethodField()
+    standardPrice = serializers.IntegerField(source="standard_price")
+    promoEnabled = serializers.BooleanField(source="promo_enabled")
+    promoActive = serializers.SerializerMethodField()
+    promoPrice = serializers.IntegerField(source="promo_price", allow_null=True)
+    promoStartAt = serializers.DateTimeField(source="promo_start_at", allow_null=True)
+    promoEndAt = serializers.DateTimeField(source="promo_end_at", allow_null=True)
     minQuantity = serializers.SerializerMethodField()
     maxQuantity = serializers.SerializerMethodField()
     paymentDetails = serializers.SerializerMethodField()
@@ -115,6 +122,12 @@ class PinPurchaseSettingsSerializer(serializers.ModelSerializer):
             "availableAgainTime",
             "disabledMessage",
             "pinPrice",
+            "standardPrice",
+            "promoEnabled",
+            "promoActive",
+            "promoPrice",
+            "promoStartAt",
+            "promoEndAt",
             "minQuantity",
             "maxQuantity",
             "paymentDetails",
@@ -130,7 +143,10 @@ class PinPurchaseSettingsSerializer(serializers.ModelSerializer):
         return any(bool(method.get("active")) for method in self.get_paymentMethods(obj))
 
     def get_pinPrice(self, obj):
-        return PIN_PRICE
+        return obj.current_price()
+
+    def get_promoActive(self, obj):
+        return obj.is_promo_active()
 
     def get_minQuantity(self, obj):
         return MIN_PIN_PURCHASE_QUANTITY

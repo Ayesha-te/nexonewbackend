@@ -44,12 +44,32 @@ class PinPurchaseSettings(models.Model):
     )
     qr_code = models.FileField(upload_to="pin-payment-qr/", null=True, blank=True)
     payment_methods = models.JSONField(default=default_pin_payment_methods, blank=True)
+    # Central, single source of truth for the Joining Fee / PIN Token price - the old
+    # module-level PIN_PRICE constant is now only a fallback default for this field.
+    standard_price = models.PositiveIntegerField(default=PIN_PRICE)
+    promo_enabled = models.BooleanField(default=False)
+    promo_price = models.PositiveIntegerField(null=True, blank=True)
+    promo_start_at = models.DateTimeField(null=True, blank=True)
+    promo_end_at = models.DateTimeField(null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     @classmethod
     def current(cls):
         obj, _ = cls.objects.get_or_create(pk=1)
         return obj
+
+    def is_promo_active(self, *, now=None):
+        if not self.promo_enabled or not self.promo_price:
+            return False
+        now = now or timezone.now()
+        if self.promo_start_at and now < self.promo_start_at:
+            return False
+        if self.promo_end_at and now > self.promo_end_at:
+            return False
+        return True
+
+    def current_price(self, *, now=None):
+        return self.promo_price if self.is_promo_active(now=now) else self.standard_price
 
 
 class Pin(models.Model):

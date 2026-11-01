@@ -8,8 +8,9 @@ from rest_framework import permissions
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
-from .models import PIN_PRICE, PIN_PURCHASE_DISABLED_MESSAGE, Pin, PinPurchaseSettings, PinRequest
+from .models import PIN_PURCHASE_DISABLED_MESSAGE, Pin, PinPurchaseSettings, PinRequest
 from .serializers import (
     PinPurchaseSettingsSerializer,
     PinRequestCreateSerializer,
@@ -83,8 +84,12 @@ class AdminPinRequestView(APIView):
             pin_request.status = "approved"
             pin_request.processed_at = timezone.now()
             pin_request.admin_note = request.data.get("admin_note", "") or ""
+            # Use the price actually charged on this request (frozen at submission time,
+            # possibly a promo price), never today's current price - generating pins later
+            # must not silently re-price an already-paid request.
+            per_pin_amount = pin_request.amount // pin_request.quantity if pin_request.quantity else pin_request.amount
             for _ in range(pin_request.quantity):
-                Pin.objects.create(owner=pin_request.user, source_request=pin_request, amount=PIN_PRICE)
+                Pin.objects.create(owner=pin_request.user, source_request=pin_request, amount=per_pin_amount)
         elif action == "rejected":
             pin_request.status = "rejected"
             pin_request.processed_at = timezone.now()
@@ -135,9 +140,66 @@ class AdminPinSettingsView(APIView):
     def get(self, request):
         return Response(PinPurchaseSettingsSerializer(PinPurchaseSettings.current(), context={"request": request}).data)
 
+    def _apply_pricing(self, settings, data):
+        """
+        Mutates `settings` in place with any pricing fields present in `data`, validating
+        server-side (never trusting the frontend alone). Returns an error Response if
+        validation fails, otherwise None. Caller still has to settings.save().
+        """
+        if "standardPrice" in data:
+            try:
+                standard_price = int(data.get("standardPrice"))
+            except (TypeError, ValueError):
+                return Response({"detail": "Standard price must be a valid number."}, status=400)
+            if standard_price <= 0:
+                return Response({"detail": "Standard price must be greater than 0."}, status=400)
+            settings.standard_price = standard_price
+
+        if "promoEnabled" in data:
+            raw = data.get("promoEnabled")
+            settings.promo_enabled = raw in (True, "true", "True", "1", 1)
+
+        if "promoPrice" in data:
+            raw_price = data.get("promoPrice")
+            if raw_price in (None, ""):
+                settings.promo_price = None
+            else:
+                try:
+                    promo_price = int(raw_price)
+                except (TypeError, ValueError):
+                    return Response({"detail": "Promo price must be a valid number."}, status=400)
+                if promo_price <= 0:
+                    return Response({"detail": "Promo price must be greater than 0."}, status=400)
+                settings.promo_price = promo_price
+
+        for field_name, model_field in (("promoStartAt", "promo_start_at"), ("promoEndAt", "promo_end_at")):
+            if field_name not in data:
+                continue
+            raw_value = data.get(field_name)
+            if raw_value in (None, ""):
+                setattr(settings, model_field, None)
+                continue
+            parsed = parse_datetime(str(raw_value))
+            if parsed is None:
+                return Response({"detail": f"{field_name} must be a valid date/time."}, status=400)
+            if timezone.is_naive(parsed):
+                parsed = timezone.make_aware(parsed)
+            setattr(settings, model_field, parsed)
+
+        if settings.promo_enabled and not settings.promo_price:
+            return Response({"detail": "A promo price is required while the promo is enabled."}, status=400)
+        if settings.promo_start_at and settings.promo_end_at and settings.promo_end_at <= settings.promo_start_at:
+            return Response({"detail": "Promo end time must be after the promo start time."}, status=400)
+
+        return None
+
     def post(self, request):
         settings = PinPurchaseSettings.current()
         settings.available_again_time = str(request.data.get("availableAgainTime", "")).strip()
+
+        pricing_error = self._apply_pricing(settings, request.data)
+        if pricing_error:
+            return pricing_error
 
         raw_methods = request.data.get("paymentMethods")
         if raw_methods:
