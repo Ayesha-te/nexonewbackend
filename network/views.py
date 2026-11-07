@@ -6,4 +6,4 @@ from .services import build_tree_payload
 
 class MyTreeApiView(APIView):
     def get(self, request):
-        return Response(build_tree_payload(request.user))
+        return Response(build_tree_payload(request.user, request=request))

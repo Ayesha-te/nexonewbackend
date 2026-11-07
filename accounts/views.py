@@ -124,7 +124,7 @@ class ActivateUserView(APIView):
 
 class MyTreeView(APIView):
     def get(self, request):
-        return Response(build_tree_payload(request.user))
+        return Response(build_tree_payload(request.user, request=request))
 
 
 class LeaderboardView(APIView):
