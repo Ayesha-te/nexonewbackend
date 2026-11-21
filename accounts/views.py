@@ -161,7 +161,7 @@ class LeaderboardView(APIView):
                 ),
             )
             .filter(totalIncome__gte=100)
-            .order_by("-totalIncome", "-monthlyIncome", "-weeklyIncome", "id")[:3]
+            .order_by("-totalIncome", "-monthlyIncome", "-weeklyIncome", "id")[:10]
         )
         return Response(LeaderboardUserSerializer(leaders, many=True, context={"request": request}).data)
 
