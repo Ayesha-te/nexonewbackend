@@ -156,12 +156,15 @@ class LeaderboardView(APIView):
                 ),
                 totalIncome=Coalesce(
                     Sum("wallet__entries__amount", filter=Q(wallet__entries__amount__gt=0)),
-                    F("current_income") + F("reward_income"),
+                    F("current_income") + F("total_withdrawn"),
                     output_field=IntegerField(),
                 ),
             )
-            .filter(totalIncome__gte=100)
-            .order_by("-totalIncome", "-monthlyIncome", "-weeklyIncome", "id")[:10]
+            # Ranked strictly by each user's current available income, not their lifetime
+            # total - a user who earned a lot in the past but has since withdrawn it all (or
+            # has 0 current income) should not outrank someone with a higher live balance.
+            .filter(currentIncome__gt=0)
+            .order_by("-currentIncome", "id")[:10]
         )
         return Response(LeaderboardUserSerializer(leaders, many=True, context={"request": request}).data)
 
