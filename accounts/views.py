@@ -131,35 +131,9 @@ class LeaderboardView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        now = timezone.localtime()
-        week_start = now - timedelta(days=7)
-        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         leaders = (
             User.objects.filter(is_staff=False, is_active=True)
-            .annotate(
-                currentIncome=F("current_income"),
-                weeklyIncome=Coalesce(
-                    Sum(
-                        "wallet__entries__amount",
-                        filter=Q(wallet__entries__amount__gt=0, wallet__entries__created_at__gte=week_start),
-                    ),
-                    Value(0),
-                    output_field=IntegerField(),
-                ),
-                monthlyIncome=Coalesce(
-                    Sum(
-                        "wallet__entries__amount",
-                        filter=Q(wallet__entries__amount__gt=0, wallet__entries__created_at__gte=month_start),
-                    ),
-                    Value(0),
-                    output_field=IntegerField(),
-                ),
-                totalIncome=Coalesce(
-                    Sum("wallet__entries__amount", filter=Q(wallet__entries__amount__gt=0)),
-                    F("current_income") + F("total_withdrawn"),
-                    output_field=IntegerField(),
-                ),
-            )
+            .annotate(currentIncome=F("current_income"))
             # Ranked strictly by each user's current available income, not their lifetime
             # total - a user who earned a lot in the past but has since withdrawn it all (or
             # has 0 current income) should not outrank someone with a higher live balance.

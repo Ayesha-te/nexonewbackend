@@ -205,10 +205,7 @@ class LeaderboardUserSerializer(serializers.ModelSerializer):
     userId = serializers.IntegerField(source="id")
     userName = serializers.CharField(source="full_name")
     profilePic = serializers.SerializerMethodField()
-    currentIncome = serializers.IntegerField()
-    weeklyIncome = serializers.IntegerField()
-    monthlyIncome = serializers.IntegerField()
-    totalIncome = serializers.IntegerField()
+    currentIncome = serializers.IntegerField(source="current_income")
 
     class Meta:
         model = User
@@ -217,9 +214,6 @@ class LeaderboardUserSerializer(serializers.ModelSerializer):
             "userName",
             "profilePic",
             "currentIncome",
-            "weeklyIncome",
-            "monthlyIncome",
-            "totalIncome",
         ]
 
     def get_profilePic(self, obj):
